@@ -7,3 +7,4 @@
 # hvordan henter man fra disk
 # hvordan hentes præcis disse fil-typer
 # kod det
+
