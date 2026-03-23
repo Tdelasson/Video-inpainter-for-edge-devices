@@ -1,7 +1,7 @@
 import cv2
 import jetson_utils
 
-PC_IP = ""      #her indsættes ip-addresse på pc'en
+PC_IP = "192.168.2.3"      #her indsættes ip-addresse på pc'en
 WIDTH = 520
 HEIGHT = 520
 BITRATE = 4000000
