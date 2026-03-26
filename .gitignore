@@ -5,3 +5,5 @@ nvidia_jetson/Data/Training_Data/*
 !nvidia_jetson/Data/Training_Data/README.md
 
 __pycache__/
+
+nvidia_jetson/Results*
