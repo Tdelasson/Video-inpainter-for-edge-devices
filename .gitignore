@@ -1,5 +1,5 @@
 nvidia_jetson/Data/Test_Data/*
-!nvidia_jetson/Data/Test_Data/.gitkeep
+nvidia_jetson/Data/Test_Data/.gitkeep
 
 nvidia_jetson/Data/Training_Data/*
-!nvidia_jetson/Data/Training_Data/.gitkeep
+nvidia_jetson/Data/Training_Data/.gitkeep
