@@ -8,6 +8,10 @@ import torch
 
 sys.path.insert(0, ".")
 
+REPO_ROOT = Path(__file__).resolve().parent
+OFFICIAL_EVAL_REPO = (REPO_ROOT / "../Baselines_Repos/video-inpainting-evaluation").resolve()
+I3D_MODEL_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/OnlineInpainting/i3d_rgb_imagenet.pt").resolve()
+
 from Test_Data.dataloader import TestDataset
 from Baselines.fuseformer_om_adapter import FuseFormerOMAdapter, MODEL_H, MODEL_W
 from Metrics.metrics import (
@@ -39,12 +43,14 @@ EVAL_SPLITS = [
     ("DAVIS", "RealObject"),
     ("YouTube-VOS", "synthetic"),
 ]
+MAX_VIDEOS = 15  # Set to None to run on all videos, or a positive integer to limit the number of videos per split
 
-
-def save_video(result, out_dir: Path):
+def save_video(result, out_dir: Path, official_names: bool = False):
     out_dir.mkdir(parents=True, exist_ok=True)
     for i, frame in enumerate(result):
-        cv2.imwrite(str(out_dir / f"{i:05d}.png"), cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
+        name = f"frame_{i:05d}_pred.png" if official_names else f"{i:05d}.png"
+        cv2.imwrite(str(out_dir / name), cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
+
 
 
 def resize_frames(frames: list[np.ndarray]) -> list[np.ndarray]:
@@ -68,6 +74,8 @@ def evaluate_video(video, result, perf):
 
 for dataset_name, mask_type in EVAL_SPLITS:
     dataset = TestDataset("Test_Data", dataset_name, mask_type)
+    if MAX_VIDEOS is not None:
+        dataset.video_names = dataset.video_names[:MAX_VIDEOS]
 
     print(f"\nRunning {dataset_name} / {mask_type} on {len(dataset)} videos")
 

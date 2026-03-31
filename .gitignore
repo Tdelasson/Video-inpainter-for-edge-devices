@@ -4,3 +4,5 @@ nvidia_jetson/Test_Data/YouTube-VOS*
 __pycache__/
 
 nvidia_jetson/Results*
+
+Baselines_Repos/*
