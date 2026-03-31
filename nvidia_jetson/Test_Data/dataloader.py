@@ -16,7 +16,7 @@ class VideoSample:
     frames: list[np.ndarray]     # list of (H, W, 3) uint8 arrays (Height, Width, RGB)
     masks: list[np.ndarray]      # list of (H, W) binary uint8 arrays (0 or 1)
     dataset: str                 # "DAVIS" or "YouTube-VOS"
-    mask_type: str               # "synthetic" or "object"
+    mask_type: str               # "synthetic" or "RealObject"
 
 
 class TestDataset:
@@ -25,7 +25,7 @@ class TestDataset:
 
     Supports:
         - DAVIS with SyntheticMasks (quantitative evaluation)
-        - DAVIS with ObjectMasks (qualitative evaluation / object removal)
+        - DAVIS with RealObjectMasks (qualitative evaluation / object removal)
         - YouTube-VOS with SyntheticMasks (quantitative evaluation)
 
     Usage:
@@ -42,17 +42,17 @@ class TestDataset:
         # --- Validate inputs ---
         if dataset not in ("DAVIS", "YouTube-VOS"):
             raise ValueError(f"dataset must be 'DAVIS' or 'YouTube-VOS', got '{dataset}'")
-        if mask_type not in ("synthetic", "object"):
-            raise ValueError(f"mask_type must be 'synthetic' or 'object', got '{mask_type}'")
-        if mask_type == "object" and dataset != "DAVIS":
-            raise ValueError("Object masks are only available for the DAVIS dataset")
+        if mask_type not in ("synthetic", "RealObject"):
+            raise ValueError(f"mask_type must be 'synthetic' or 'RealObject', got '{mask_type}'")
+        if mask_type == "RealObject" and dataset != "DAVIS":
+            raise ValueError("RealObject masks are only available for the DAVIS dataset")
 
         # --- Set up directory paths ---
         self.frames_dir = self.data_root / dataset / "JPEGImages"
         if mask_type == "synthetic":
             self.masks_dir = self.data_root / dataset / "SyntheticMasks"
         else:
-            self.masks_dir = self.data_root / dataset / "ObjectMasks"
+            self.masks_dir = self.data_root / dataset / "RealObjectMasks"
 
         # Verify the directories actually exist (catches missing downloads early)
         if not self.frames_dir.exists():
@@ -68,7 +68,7 @@ class TestDataset:
         Determine which video sequences are available.
 
         For DAVIS synthetic: uses test.json to get the 50 test sequences.
-        For DAVIS object / YouTube-VOS: uses the intersection of frame and mask folders.
+        For DAVIS RealObject / YouTube-VOS: uses the intersection of frame and mask folders.
         """
         if self.dataset == "DAVIS" and self.mask_type == "synthetic":
             # test.json defines exactly which 50 sequences have synthetic masks
@@ -128,10 +128,23 @@ class TestDataset:
         # Load masks as binary numpy arrays (1 = inpaint this region, 0 = keep)
         masks = []
         for p in mask_paths:
-            mask = Image.open(p).convert("L")  # load as grayscale
-            mask_array = np.array(mask)
-            mask_array = (mask_array > 127).astype(np.uint8)  # binarize
+            mask_img = Image.open(p)
+            mask_array = np.array(mask_img)
+
+            # If mask is RGB/RGBA for some reason, reduce to one channel
+            if mask_array.ndim == 3:
+                mask_array = mask_array[..., 0]
+
+            if self.mask_type == "synthetic":
+                # Synthetic masks are ordinary black/white masks
+                mask_array = (mask_array > 127).astype(np.uint8)
+            else:
+                # RealObject masks are label maps / palette masks
+                # Any non-zero label means "remove this object region"
+                mask_array = (mask_array > 0).astype(np.uint8)
+
             masks.append(mask_array)
+
 
         return VideoSample(
             name=video_name,

@@ -1,8 +1,5 @@
-nvidia_jetson/Data/Test_Data/*
-!nvidia_jetson/Data/Test_Data/README.md
-
-nvidia_jetson/Data/Training_Data/*
-!nvidia_jetson/Data/Training_Data/README.md
+nvidia_jetson/Test_Data/DAVIS*
+nvidia_jetson/Test_Data/YouTube-VOS*
 
 __pycache__/
 

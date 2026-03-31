@@ -79,10 +79,13 @@ class FuseFormerOMAdapter(BaseVideoInpainter):
         self,
         frames: list[np.ndarray],
         masks: list[np.ndarray],
+        resize_to_original: bool = True,
     ) -> list[np.ndarray]:
         orig_h, orig_w = frames[0].shape[:2]
         imgs, masks_t, binary_masks, resized_frames = self._preprocess(frames, masks)
         comp_frames = self._online_infer(imgs, masks_t, binary_masks, resized_frames)
+        if not resize_to_original:
+            return [frame.astype(np.uint8) for frame in comp_frames]
         return self._postprocess(comp_frames, orig_h, orig_w)
 
     def _preprocess(
@@ -136,31 +139,46 @@ class FuseFormerOMAdapter(BaseVideoInpainter):
         """Run sequential online inference with memory accumulation."""
         video_length = imgs.shape[1]
         comp_frames = [None] * video_length
-        inpainting_memory = torch.Tensor().to(self.device)
-        if self.fp16:
-            inpainting_memory = inpainting_memory.half()
+        memory_bank_cpu: list[torch.Tensor] = []
 
-        with torch.no_grad():
+        with torch.inference_mode():
             for f in range(video_length):
                 neighbor_ids = [i for i in range(max(0, f - NUM_NEIGHBORS), f)]
                 ref_ids = _get_ref_index(f, neighbor_ids, REF_STEP, NUM_REFS)
+                selected_ids = neighbor_ids + ref_ids
 
                 current_frame = imgs[:, [f], :, :, :]
                 current_mask = masks_t[:, [f], :, :, :]
                 masked_img = current_frame * (1 - current_mask)
 
+                if selected_ids:
+                    selected_memory = torch.stack(
+                        [memory_bank_cpu[i] for i in selected_ids],
+                        dim=0,
+                    ).to(self.device, non_blocking=True)
+                    if self.fp16:
+                        selected_memory = selected_memory.half()
+                else:
+                    selected_memory = torch.empty(0, device=self.device, dtype=masked_img.dtype)
+
                 if self.fp16:
                     with torch.cuda.amp.autocast():
-                        pred_img, attn = self.model(masked_img, inpainting_memory[neighbor_ids + ref_ids])
+                        pred_img, attn = self.model(masked_img, selected_memory)
                 else:
-                    pred_img, attn = self.model(masked_img, inpainting_memory[neighbor_ids + ref_ids])
+                    pred_img, attn = self.model(masked_img, selected_memory)
 
-                inpainting_memory = torch.cat((inpainting_memory, attn.unsqueeze(0)))
+                stored_attn = attn.detach().to("cpu")
+                if self.fp16:
+                    stored_attn = stored_attn.half()
+                memory_bank_cpu.append(stored_attn)
 
                 pred_img = (pred_img.float() + 1) / 2
                 pred_img = pred_img.cpu().permute(0, 2, 3, 1).numpy() * 255
-                img = (pred_img[0]).astype(np.uint8) * binary_masks[f] + resized_frames[f] * (1 - binary_masks[f])
-                comp_frames[f] = img
+                pred_uint8 = np.clip(pred_img[0], 0, 255).astype(np.uint8)
+
+                img = pred_uint8 * binary_masks[f] + resized_frames[f] * (1 - binary_masks[f])
+                comp_frames[f] = img.astype(np.uint8)
+                del selected_memory, attn
 
         return comp_frames
 

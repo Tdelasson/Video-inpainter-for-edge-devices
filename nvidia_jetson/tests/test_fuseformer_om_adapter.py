@@ -219,7 +219,7 @@ class TestFuseFormerOMIntegration:
     @pytest.mark.skipif(not HAS_DAVIS, reason="DAVIS test data not found")
     def test_inpaint_davis_video(self, adapter):
         """Inpaint a real DAVIS video and verify output differs in masked regions."""
-        from Data.dataloader import TestDataset
+        from Test_Data.dataloader import TestDataset
 
         dataset = TestDataset(str(TEST_DATA_ROOT), "DAVIS", "object")
         video = dataset[0]

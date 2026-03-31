@@ -27,12 +27,16 @@ class BaseVideoInpainter(ABC):
         self,
         frames: list[np.ndarray],
         masks: list[np.ndarray],
+        resize_to_original: bool = True,
     ) -> list[np.ndarray]:
         """Inpaint masked regions in a video sequence.
 
         Args:
             frames: List of (H, W, 3) uint8 RGB frames.
             masks: List of (H, W) binary uint8 masks (1=inpaint, 0=keep).
+            resize_to_original: If True, resize the output back to the
+                original frame resolution. If False, return frames at the
+                model's native inference resolution.
 
         Returns:
             List of (H, W, 3) uint8 RGB frames with masked regions inpainted.

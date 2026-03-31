@@ -1,1 +1,0 @@
-TODO: Add info about training data

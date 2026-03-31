@@ -11,13 +11,19 @@ Performance metrics:
     - measure_performance: FPS, latency, and peak memory usage
 """
 
+import json
+import shutil
+import subprocess
+import sys
+import tempfile
 import time
 import tracemalloc
+from pathlib import Path
 
 import cv2
 import numpy as np
 from scipy import linalg
-from skimage.metrics import structural_similarity
+from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 
 import torch
 import torch.nn as nn
@@ -42,10 +48,7 @@ def compute_psnr(img1: np.ndarray, img2: np.ndarray) -> float:
     assert img1.shape == img2.shape, (
         f"Image shapes differ: {img1.shape} vs {img2.shape}"
     )
-    mse = np.mean((img1.astype(np.float64) - img2.astype(np.float64)) ** 2)
-    if mse == 0:
-        return float("inf")
-    return 20.0 * np.log10(255.0 / np.sqrt(mse))
+    return float(peak_signal_noise_ratio(img1, img2, data_range=255))
 
 
 def compute_ssim(img1: np.ndarray, img2: np.ndarray) -> float:
@@ -62,7 +65,7 @@ def compute_ssim(img1: np.ndarray, img2: np.ndarray) -> float:
         f"Image shapes differ: {img1.shape} vs {img2.shape}"
     )
     return structural_similarity(
-        img1, img2, data_range=255, channel_axis=2
+        img1, img2, data_range=255, channel_axis=2, win_size=65
     )
 
 
@@ -71,62 +74,108 @@ def compute_ssim(img1: np.ndarray, img2: np.ndarray) -> float:
 # ============================================================
 
 
-def compute_ewarp(frames: list[np.ndarray], masks: list[np.ndarray]) -> float:
-    """Compute warping error to measure temporal consistency.
+def _write_eval_video_gt(
+    video_name: str,
+    frames: list[np.ndarray],
+    masks: list[np.ndarray],
+    gt_root: Path,
+    output_size: tuple[int, int] | None = None,
+) -> None:
+    """Write GT frames and masks in the MichiganCOG evaluation layout."""
+    video_dir = gt_root / video_name
+    video_dir.mkdir(parents=True, exist_ok=True)
 
-    For each consecutive frame pair, computes optical flow, warps the first
-    frame toward the second, and measures the L2 error in non-masked regions.
+    for idx, (frame, mask) in enumerate(zip(frames, masks)):
+        if output_size is not None:
+            frame = cv2.resize(frame, output_size, interpolation=cv2.INTER_LINEAR)
+            mask = cv2.resize(mask.astype(np.uint8), output_size, interpolation=cv2.INTER_NEAREST)
+        frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+        mask_u8 = (mask > 0).astype(np.uint8) * 255
+        cv2.imwrite(str(video_dir / f"frame_{idx:05d}_gt.png"), frame_bgr)
+        cv2.imwrite(str(video_dir / f"frame_{idx:05d}_mask.png"), mask_u8)
 
-    Args:
-        frames: List of inpainted frames, each (H, W, 3) uint8.
-        masks: List of binary masks, each (H, W) uint8 with 1=inpainted, 0=keep.
 
-    Returns:
-        Mean warping error across all frame pairs. Lower is better.
+def compute_ewarp(
+    videos: list[object],
+    pred_root: str | Path,
+    eval_repo_root: str | Path,
+    eval_feats_root: str | Path | None = None,
+    metric_key: str = "warp_error_mask",
+    output_size: tuple[int, int] | None = None,
+    python_executable: str = sys.executable,
+) -> float:
+    """Compute official E_warp via MichiganCOG/video-inpainting-evaluation.
+
+    The raw value returned here matches the external evaluator. To report
+    the paper's ``E_warp (x10^-2)`` style number, multiply the raw result
+    by 100.
     """
-    if len(frames) < 2:
-        return 0.0
-
-    errors = []
-
-    for t in range(len(frames) - 1):
-        frame_curr = frames[t]
-        frame_next = frames[t + 1]
-        mask_next = masks[t + 1]
-
-        gray_curr = cv2.cvtColor(frame_curr, cv2.COLOR_RGB2GRAY)
-        gray_next = cv2.cvtColor(frame_next, cv2.COLOR_RGB2GRAY)
-
-        # Compute forward optical flow (curr -> next)
-        flow = cv2.calcOpticalFlowFarneback(
-            gray_curr, gray_next,
-            flow=None,
-            pyr_scale=0.5, levels=3, winsize=15,
-            iterations=3, poly_n=5, poly_sigma=1.2,
-            flags=0,
+    eval_repo_root = Path(eval_repo_root)
+    if not eval_repo_root.exists():
+        raise FileNotFoundError(
+            f"Official evaluation repo not found: {eval_repo_root}. "
+            "Clone MichiganCOG/video-inpainting-evaluation and update "
+            "OFFICIAL_EVAL_REPO before running synthetic evaluations."
         )
 
-        # Warp frame_curr toward frame_next using the flow
-        h, w = flow.shape[:2]
-        map_x = np.arange(w, dtype=np.float32)[None, :] + flow[:, :, 0]
-        map_y = np.arange(h, dtype=np.float32)[:, None] + flow[:, :, 1]
-        warped = cv2.remap(
-            frame_curr, map_x, map_y,
-            interpolation=cv2.INTER_LINEAR,
-            borderMode=cv2.BORDER_REPLICATE,
-        )
+    pred_root = Path(pred_root)
+    if not pred_root.exists():
+        raise FileNotFoundError(f"Prediction directory not found: {pred_root}")
 
-        # Compute L2 error in non-masked regions only
-        diff = (warped.astype(np.float64) - frame_next.astype(np.float64)) ** 2
-        pixel_error = np.sqrt(np.sum(diff, axis=2))  # (H, W)
+    with tempfile.TemporaryDirectory(prefix="ewarp_gt_") as tmp_dir:
+        tmp_path = Path(tmp_dir)
+        gt_root = tmp_path / "gt_frames"
+        gt_root.mkdir(parents=True, exist_ok=True)
 
-        non_masked = mask_next == 0
-        if np.any(non_masked):
-            errors.append(np.mean(pixel_error[non_masked]))
+        for video in videos:
+            _write_eval_video_gt(
+                video.name,
+                video.frames,
+                video.masks,
+                gt_root,
+                output_size=output_size,
+            )
 
-    if not errors:
-        return 0.0
-    return float(np.mean(errors))
+        if eval_feats_root is None:
+            eval_feats_root = tmp_path / "eval_feats"
+            preprocess_script = eval_repo_root / "scripts" / "preprocessing" / "compute-evaluation-features.sh"
+            if not preprocess_script.exists():
+                raise FileNotFoundError(
+                    f"Feature preprocessing script not found: {preprocess_script}"
+                )
+            bash_exe = shutil.which("bash")
+            if bash_exe is None:
+                raise RuntimeError(
+                    "Official E_warp requires precomputed evaluation features or "
+                    "a bash executable to run the MichiganCOG preprocessing script."
+                )
+            subprocess.run(
+                [bash_exe, str(preprocess_script), str(gt_root), str(eval_feats_root)],
+                cwd=eval_repo_root,
+                check=True,
+            )
+        else:
+            eval_feats_root = Path(eval_feats_root)
+
+        output_path = tmp_path / "ewarp_results.json"
+        cmd = [
+            python_executable,
+            "-m",
+            "src.main.evaluate_inpainting",
+            f"--gt_root={gt_root}",
+            f"--pred_root={pred_root}",
+            f"--eval_feats_root={eval_feats_root}",
+            f"--output_path={output_path}",
+            f"--include={metric_key}",
+        ]
+        subprocess.run(cmd, cwd=eval_repo_root, check=True)
+
+        with open(output_path, encoding="utf-8") as f:
+            results = json.load(f)
+
+    if metric_key not in results:
+        raise KeyError(f"Metric '{metric_key}' not found in official evaluation output")
+    return float(results[metric_key])
 
 
 # ============================================================
@@ -558,4 +607,45 @@ def measure_performance(
         "fps": round(fps, 2),
         "latency_ms": round(latency_ms, 2),
         "peak_memory_mb": round(peak_memory_mb, 2),
+    }
+
+def measure_video_run(
+    video_fn: callable,
+    num_frames: int,
+    use_cuda: bool | None = None,
+) -> tuple[object, dict]:
+    """Run one full video inference and measure throughput/latency/memory."""
+    if use_cuda is None:
+        use_cuda = torch.cuda.is_available()
+
+    if use_cuda:
+        torch.cuda.synchronize()
+        torch.cuda.reset_peak_memory_stats()
+
+        start = time.perf_counter()
+        result = video_fn()
+        torch.cuda.synchronize()
+        end = time.perf_counter()
+
+        peak_memory_mb = torch.cuda.max_memory_allocated() / (1024 ** 2)
+    else:
+        tracemalloc.start()
+
+        start = time.perf_counter()
+        result = video_fn()
+        end = time.perf_counter()
+
+        _, peak_memory = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+        peak_memory_mb = peak_memory / (1024 ** 2)
+
+    total_time = end - start
+    latency_ms = (total_time / num_frames) * 1000 if num_frames else 0.0
+    fps = num_frames / total_time if total_time > 0 else 0.0
+
+    return result, {
+        "fps": round(fps, 2),
+        "latency_ms": round(latency_ms, 2),
+        "peak_memory_mb": round(peak_memory_mb, 2),
+        "total_time_s": round(total_time, 3),
     }
