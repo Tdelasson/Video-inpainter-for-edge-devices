@@ -22,7 +22,7 @@ def gstreamer_pipeline_in(sensor_id=0, w=WIDTH, h=HEIGHT, fps=FPS):
 #Takes the images and convert it to jpeg such that i can be sent via UDP to the PC host.
 gst_pipeline_out = (
     f"appsrc ! "
-    f"video/x-raw, format=BGR, width{WIDTH},h height={HEIGHT}, framerate={FPS}/1 ! "
+    f"video/x-raw, format=BGR, width{WIDTH}, height={HEIGHT}, framerate={FPS}/1 ! "
     f"videoconvert ! "
     f"video/x-raw, format=I420 !"
     f"jpegenc quality=80 ! "

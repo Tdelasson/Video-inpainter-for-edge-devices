@@ -23,11 +23,11 @@ def gstreamer_pipeline_in(sensor_id=0, w=WIDTH, h=HEIGHT, fps=FPS):
 
 
 #Takes the images and convert it to jpeg such that i can be sent via UDP to the PC host.
-#using nvjpegenc saves CPU
+#using jpegenc saves CPU
 def gstreamer_pipeline_out(port):
     return (
         f"appsrc ! "
-        f"video/x-raw, format=BGR, width{WIDTH},h height={HEIGHT}, framerate={FPS}/1 ! "
+        f"video/x-raw, format=BGR, width{WIDTH}, height={HEIGHT}, framerate={FPS}/1 ! "
         f"videoconvert ! "
         f"video/x-raw, format=I420 !"
         f"jpegenc quality=80 ! "
@@ -40,6 +40,7 @@ def gstreamer_pipeline_out(port):
 ai_queue = queue.Queue(maxsize=1)
 
 out_ai = None
+
 
 def ai_thread():
     global out_ai
@@ -59,6 +60,10 @@ def ai_thread():
         
         ai_queue.task_done()
 
+    if out_ai is not None:
+        out_ai.release()
+
+
 
 
 #Opens the camera using the GStream string.
@@ -75,10 +80,12 @@ if not cap.isOpened() or not out_direct.isOpened():
     sys.exit()
 
 
+#makes threading after we know the camera is accessible 
 t = threading.Thread(target=ai_thread, daemon=True)
 t.start()
 
 print(f"Streamer nu CAM1 direkte til {PC_IP}:{DIRECT_PORT}...")
+print(f"Streamer AI til {PC_IP}:{AI_PORT}")
 
 
 #starts the main loop which retrieves images from the camera and sendes them
@@ -109,3 +116,8 @@ finally:
 
     cap.release()
     out_direct.release()
+
+    #venter på at AI-tråden er lukket
+    t.join(timeout=1.0)
+
+    print("Alt er released correct.")
