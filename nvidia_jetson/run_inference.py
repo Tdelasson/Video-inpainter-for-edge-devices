@@ -9,7 +9,8 @@ import torch
 
 sys.path.insert(0, ".")
 
-from Baselines.fuseformer_om_adapter import FuseFormerOMAdapter, MODEL_H, MODEL_W
+from Baselines.fuseformer_om_adapter import FuseFormerOMAdapter
+from Baselines.propainter_adapter import ProPainterAdapter
 from Metrics.metrics import compute_psnr, compute_ssim, measure_video_run
 from Metrics.official_eval import run_official_synthetic_eval, save_prediction_video
 from Test_Data.dataloader import TestDataset
@@ -17,7 +18,12 @@ from Test_Data.dataloader import TestDataset
 REPO_ROOT = Path(__file__).resolve().parent
 DEFAULT_RESULTS_DIR = REPO_ROOT / "Results2"
 DEFAULT_OFFICIAL_EVAL_REPO = (REPO_ROOT / "../Baselines_Repos/video-inpainting-evaluation-public").resolve()
-DEFAULT_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/OnlineInpainting/fuseformer.pth").resolve()
+DEFAULT_FUSEFORMER_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/OnlineInpainting/fuseformer.pth").resolve()
+DEFAULT_PROPAINTER_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/ProPainter/ProPainter.pth").resolve()
+DEFAULT_PROPAINTER_RAFT_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/ProPainter/raft-things.pth").resolve()
+DEFAULT_PROPAINTER_FLOW_WEIGHTS_PATH = (
+    REPO_ROOT / "../Baselines_Repos/pthFiles/ProPainter/recurrent_flow_completion.pth"
+).resolve()
 DEFAULT_SPLITS = [
     ("DAVIS", "synthetic"),
     ("DAVIS", "RealObject"),
@@ -27,6 +33,13 @@ DEFAULT_SPLITS = [
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run paper-style video inpainting evaluation")
+    parser.add_argument(
+        "--model",
+        type=str,
+        default="fuseformer_om",
+        choices=["fuseformer_om", "propainter"],
+        help="Model adapter to run",
+    )
     parser.add_argument(
         "--splits",
         nargs="*",
@@ -66,8 +79,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--weights-path",
         type=Path,
-        default=DEFAULT_WEIGHTS_PATH,
-        help="Path to FuseFormer weights",
+        default=None,
+        help="Path to model checkpoint. Defaults depend on --model.",
+    )
+    parser.add_argument(
+        "--raft-weights-path",
+        type=Path,
+        default=DEFAULT_PROPAINTER_RAFT_WEIGHTS_PATH,
+        help="Path to RAFT weights (used by ProPainter)",
+    )
+    parser.add_argument(
+        "--flow-weights-path",
+        type=Path,
+        default=DEFAULT_PROPAINTER_FLOW_WEIGHTS_PATH,
+        help="Path to recurrent flow completion weights (used by ProPainter)",
     )
     parser.add_argument(
         "--fp16",
@@ -87,18 +112,33 @@ def parse_splits(raw_splits: list[str]) -> list[tuple[str, str]]:
     return splits
 
 
-def save_preview_video(result: list[np.ndarray], out_dir: Path) -> None:
-    out_dir.mkdir(parents=True, exist_ok=True)
-    for i, frame in enumerate(result):
-        cv2.imwrite(str(out_dir / f"{i:05d}.png"), cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
+def _build_adapter(args: argparse.Namespace, device: str):
+    model_key = args.model.lower()
+    if model_key == "fuseformer_om":
+        weights_path = args.weights_path or DEFAULT_FUSEFORMER_WEIGHTS_PATH
+        adapter = FuseFormerOMAdapter(
+            weights_path=str(weights_path),
+            device=device,
+            fp16=args.fp16,
+        )
+        return adapter, adapter.model_h, adapter.model_w
+
+    if model_key == "propainter":
+        weights_path = args.weights_path or DEFAULT_PROPAINTER_WEIGHTS_PATH
+        adapter = ProPainterAdapter(
+            weights_path=str(weights_path),
+            raft_weights_path=str(args.raft_weights_path),
+            flow_weights_path=str(args.flow_weights_path),
+            device=device,
+            fp16=args.fp16,
+        )
+        return adapter, adapter.model_h, adapter.model_w
+
+    raise ValueError(f"Unsupported model: {args.model}")
 
 
-def resize_frames(frames: list[np.ndarray]) -> list[np.ndarray]:
-    return [cv2.resize(frame, (MODEL_W, MODEL_H), interpolation=cv2.INTER_LINEAR) for frame in frames]
-
-
-def evaluate_video(video, result, perf) -> dict:
-    gt_resized = resize_frames(video.frames)
+def evaluate_video(video, result, perf, model_w: int, model_h: int) -> dict:
+    gt_resized = [cv2.resize(frame, (model_w, model_h), interpolation=cv2.INTER_LINEAR) for frame in video.frames]
     psnr_vals = [compute_psnr(gt, pred) for gt, pred in zip(gt_resized, result)]
     ssim_vals = [compute_ssim(gt, pred) for gt, pred in zip(gt_resized, result)]
     return {
@@ -118,11 +158,7 @@ def main() -> None:
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
 
-    adapter = FuseFormerOMAdapter(
-        weights_path=str(args.weights_path),
-        device=device,
-        fp16=args.fp16,
-    )
+    adapter, model_h, model_w = _build_adapter(args, device)
 
     for dataset_name, mask_type in eval_splits:
         dataset = TestDataset("Test_Data", dataset_name, mask_type)
@@ -145,9 +181,6 @@ def main() -> None:
                 use_cuda=(device == "cuda"),
             )
 
-            out_dir = split_root / video.name
-            save_preview_video(result, out_dir)
-
             video_metrics = {
                 "video": video.name,
                 "dataset": video.dataset,
@@ -155,7 +188,7 @@ def main() -> None:
             }
 
             if mask_type == "synthetic":
-                video_metrics.update(evaluate_video(video, result, perf))
+                video_metrics.update(evaluate_video(video, result, perf, model_w=model_w, model_h=model_h))
                 synthetic_videos.append(video)
                 save_prediction_video(video.name, result, official_pred_root)
             else:
@@ -169,9 +202,6 @@ def main() -> None:
                 )
 
             split_metrics.append(video_metrics)
-
-            with open(out_dir / "metrics.json", "w", encoding="utf-8") as f:
-                json.dump(video_metrics, f, indent=2)
 
         summary = {
             "dataset": dataset_name,
@@ -197,7 +227,7 @@ def main() -> None:
                     pred_root=official_pred_root,
                     repo_root=args.official_eval_repo,
                     eval_feats_root=args.official_eval_feats_root,
-                    output_size=(MODEL_W, MODEL_H),
+                    output_size=(model_w, model_h),
                     metrics=("vfid",),
                     python_executable=str(args.official_eval_python) if args.official_eval_python else sys.executable,
                 )
@@ -212,7 +242,7 @@ def main() -> None:
                     pred_root=official_pred_root,
                     repo_root=args.official_eval_repo,
                     eval_feats_root=args.official_eval_feats_root,
-                    output_size=(MODEL_W, MODEL_H),
+                    output_size=(model_w, model_h),
                     metrics=("warp_error_mask",),
                     python_executable=str(args.official_eval_python) if args.official_eval_python else sys.executable,
                 )
