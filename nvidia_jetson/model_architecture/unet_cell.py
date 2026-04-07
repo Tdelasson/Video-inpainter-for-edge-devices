@@ -11,11 +11,14 @@ class UNetCell(nn.Module):
         channels_in_deepest_layer: int = base_channels * (2 ** (num_layers - 1))
 
         self.encoder = Encoder(in_channels, base_channels, num_layers)
-        self.decoder = Decoder(channels_in_deepest_layer, base_channels, num_layers, in_channels)
+        self.decoder = Decoder(channels_in_deepest_layer, base_channels, num_layers, raw_channels=in_channels)
 
         self.conv_gru = ConvolutionalGatedRecurrentUnits(channels_in_deepest_layer, channels_in_deepest_layer, kernel_size, stride, padding)
 
-        self.head = nn.Conv2d(base_channels, 3, kernel_size=1)
+        self.head = nn.Sequential(
+            nn.Conv2d(base_channels, 3, kernel_size=1),
+            nn.Sigmoid()
+        )
 
     def forward(self, x: torch.Tensor, h_prev: torch.Tensor=None) -> tuple[torch.Tensor, torch.Tensor]:
         skips: list[torch.Tensor] = self.encoder(x)

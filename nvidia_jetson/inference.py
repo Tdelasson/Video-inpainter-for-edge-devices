@@ -5,42 +5,35 @@ import numpy as np
 from model_architecture.video_inpainter import VideoInpainter
 from torchinfo import summary
 from model_architecture.optical_flow import get_optical_flow
+import time
 
-def prepare_input_blocks(input_frames, window_size=3):
+def prepare_input_blocks(input_frames, window_size):
     """Handles all the image processing and sliding window logic."""
-    optical_flow_tensors: list[torch.tensor] = []
     tensors = []
 
-    optical_flow = get_optical_flow(input_frames)
-
-
-    for flow in optical_flow:
-        optical_flow_tensors.append(torch.from_numpy(flow))
-        print(flow)
-
-    stacked_optical_flow_tensor = torch.stack(optical_flow_tensors)
-    print(stacked_optical_flow_tensor)
-
-    for f in input_frames:
-        print(f.shape)
+    for f in input_frames: # Convert each frame to a tensor and normalize to [0,1]
         t = torch.from_numpy(cv2.cvtColor(f, cv2.COLOR_BGR2RGB)).float() / 255.0
-        tensors.append(t.permute(2, 0, 1)) # We need shape [C,H,W], current shape is [H, W, C]
+        tensors.append(t.permute(2, 0, 1)) # We need shape [C,H,W], current shape is [H,W,C]
 
     blocks = []
 
-    for i in range(len(tensors) - window_size + 1):
-        # Slice the list to get 'window_size' frames and concat on Channel dim
+    for i in range(len(tensors) - window_size + 1): # Make blocks of size window_size
+
         window_frames = tensors[i: i + window_size] # slices the tensors list to get a sublist
         # starting at index i and ending at index i + window_size, giving exactly window_size elements.
-        flow_frames = input_frames[i: i + window_size]
 
-        flow = get_optical_flow(flow_frames)
-        flow = [torch.from_numpy(f).unsqueeze(0) for f in flow]  # (H, W) -> (1, H, W)
-        flow_block = torch.cat(flow, dim=0)
+        if window_size > 1: # Only compute optical flow if we have at least 2 frames in the window
+            flow_frames = input_frames[i: i + window_size]
+            flow = get_optical_flow(flow_frames)
+            flow = [torch.from_numpy(f).unsqueeze(0) for f in flow]  # (H, W) -> (1, H, W)
+            flow_block = torch.cat(flow, dim=0)
+            window_block = torch.cat(window_frames, dim=0)  # [window_size * 3, H, W]
+            block = torch.cat([window_block, flow_block], dim=0)
 
-        window_block = torch.cat(window_frames, dim=0)  # [window_size * 3, H, W]
+        else:
+            window_block = torch.cat(window_frames, dim=0)  # [window_size * 3, H, W]
+            block = torch.cat([window_block], dim=0)     # [window_size * 3 + (window_size - 1), H, W]
 
-        block = torch.cat([window_block, flow_block], dim=0)  # [window_size * 3 + (window_size - 1), H, W]
         blocks.append(block)
 
     if not blocks:
@@ -54,7 +47,12 @@ def run_model(video_inpainter, model_input_tensor):
     """inference: takes a tensor, returns a tensor."""
     video_inpainter.eval()
     with torch.no_grad():
+        start = time.perf_counter()
         output_frames, hidden = video_inpainter(model_input_tensor)
+        end = time.perf_counter()
+
+        latency_ms = (end - start) * 1000
+        print(f"Frame latency: {latency_ms:.2f}ms")
     return output_frames
 
 
@@ -94,7 +92,7 @@ def save_and_show_results(output_tensor, original_frames, window_size):
 
     cv2.destroyAllWindows()
 
-WINDOW_SIZE = 5
+WINDOW_SIZE = 2
 IN_CHANNELS = WINDOW_SIZE * 3 + (WINDOW_SIZE - 1)
 
 # --- Execution ---

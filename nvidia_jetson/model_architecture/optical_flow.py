@@ -6,7 +6,8 @@ def get_optical_flow(frames: list[np.ndarray]) -> list[np.ndarray]:
     Takes a sorted list of frames, where the current frame is the last element"""
 
     if len(frames) < 2:
-        raise ValueError("At least 2 frames are required to compute optical flow.")
+        print("At least 2 frames are required to compute optical flow.")
+        return []
 
     grayscale_frames = []
     for frame in frames:

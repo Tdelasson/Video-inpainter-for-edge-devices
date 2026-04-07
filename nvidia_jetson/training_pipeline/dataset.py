@@ -2,6 +2,7 @@ import os
 import cv2
 from torch.utils.data import Dataset
 import json
+import numpy as np
 
 
 class YouTubeVOSDataset(Dataset):
@@ -47,7 +48,7 @@ class YouTubeVOSDataset(Dataset):
             print(f"Warning: Only {len(rgb_frames)} frames were loaded for video {self.video_list[self.video_index]}. Discarding this video.")
             rgb_frames = []
 
-        return rgb_frames
+        return np.array(rgb_frames)
 
     def get_smallest_existing_image_index(self, path):
         start_index = "00000"
