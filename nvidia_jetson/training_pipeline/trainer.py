@@ -5,6 +5,7 @@ import torch
 import torch.optim as optim
 import numpy as np
 from torch.optim.lr_scheduler import CosineAnnealingLR
+import os
 
 from torchvision.models import vgg16, VGG16_Weights
 
@@ -25,8 +26,11 @@ class PerceptualLoss(torch.nn.Module):
 # We have 3471 files
 number_of_seq = 50
 
+root_dir = os.getcwd()
 
-dataset = YouTubeVOSDataset(root_dir=r"C:\Users\tobpu\Documents\aau\Semester 6\training_data\train", seq_len=5)
+train_path = os.path.join(root_dir, "training_data", "train")
+
+dataset = YouTubeVOSDataset(root_dir=train_path, seq_len=5)
 
 IN_CHANNELS = dataset.seq_len * 3
 TARGET_RES = (256, 256)
