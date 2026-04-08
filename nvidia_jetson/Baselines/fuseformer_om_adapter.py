@@ -61,6 +61,8 @@ class FuseFormerOMAdapter(BaseVideoInpainter):
     def __init__(self, weights_path: str, device: str = "cuda", fp16: bool = False):
         self.device = torch.device(device)
         self.fp16 = fp16
+        self.model_h = MODEL_H #Specific to --fp16 for jetson
+        self.model_w = MODEL_W #Specific to --fp16 for jetson
 
         InpaintGenerator = _import_inpaint_generator()
         self.model = InpaintGenerator().to(self.device)
