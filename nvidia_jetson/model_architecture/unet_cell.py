@@ -16,7 +16,9 @@ class UNetCell(nn.Module):
         self.conv_gru = ConvolutionalGatedRecurrentUnits(channels_in_deepest_layer, channels_in_deepest_layer, kernel_size, stride, padding)
 
         self.head = nn.Sequential(
-            nn.Conv2d(base_channels, 3, kernel_size=1),
+            nn.Conv2d(base_channels, base_channels, kernel_size=3, padding=1),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(base_channels, 3, kernel_size=3, padding=1),
             nn.Sigmoid()
         )
 

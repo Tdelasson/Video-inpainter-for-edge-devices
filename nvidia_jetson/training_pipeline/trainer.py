@@ -62,19 +62,19 @@ for i in range(0, number_of_seq):
 
 print(len(rgb_data))
 
-model = VideoInpainter(in_channels=IN_CHANNELS, base_channels=64, num_layers=3)
+model = VideoInpainter(in_channels=IN_CHANNELS, base_channels=128, num_layers=5)
 
 print("input")
 print(training_tensors[0].shape)
 
-optimizer = optim.Adam(model.parameters(), lr=0.0001)
+optimizer = optim.Adam(model.parameters(), lr=0.001)
 scheduler = CosineAnnealingLR(optimizer, T_max=1000, eta_min=1e-6)
 results = []
 
 perceptual_criterion = PerceptualLoss()
 l1_criterion = torch.nn.L1Loss()
 
-for i in range(0, 1000):
+for i in range(0, 500):
     optimizer.zero_grad()
 
     output_frame, _ = model(training_tensors[0].unsqueeze(0).unsqueeze(0))
