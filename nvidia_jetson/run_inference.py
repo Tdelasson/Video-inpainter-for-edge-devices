@@ -11,6 +11,7 @@ sys.path.insert(0, ".")
 
 from Baselines.fuseformer_om_adapter import FuseFormerOMAdapter
 from Baselines.propainter_adapter import ProPainterAdapter
+from Baselines.vinet_adapter import ViNETAdapter
 from Metrics.metrics import compute_psnr, compute_ssim, measure_video_run
 from Metrics.official_eval import run_official_synthetic_eval, save_prediction_video
 from Test_Data.dataloader import TestDataset
@@ -24,6 +25,7 @@ DEFAULT_PROPAINTER_RAFT_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles
 DEFAULT_PROPAINTER_FLOW_WEIGHTS_PATH = (
     REPO_ROOT / "../Baselines_Repos/pthFiles/ProPainter/recurrent_flow_completion.pth"
 ).resolve()
+DEFAULT_VINET_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/ViNETsave_agg_rec_512.pth").resolve()
 DEFAULT_SPLITS = [
     ("DAVIS", "synthetic"),
     ("DAVIS", "RealObject"),
@@ -37,7 +39,7 @@ def parse_args() -> argparse.Namespace:
         "--model",
         type=str,
         default="fuseformer_om",
-        choices=["fuseformer_om", "propainter"],
+        choices=["fuseformer_om", "propainter", "vinet"],
         help="Model adapter to run",
     )
     parser.add_argument(
@@ -129,6 +131,15 @@ def _build_adapter(args: argparse.Namespace, device: str):
             weights_path=str(weights_path),
             raft_weights_path=str(args.raft_weights_path),
             flow_weights_path=str(args.flow_weights_path),
+            device=device,
+            fp16=args.fp16,
+        )
+        return adapter, adapter.model_h, adapter.model_w
+
+    if model_key == "vinet":
+        weights_path = args.weights_path or DEFAULT_VINET_WEIGHTS_PATH
+        adapter = ViNETAdapter(
+            weights_path=str(weights_path),
             device=device,
             fp16=args.fp16,
         )
