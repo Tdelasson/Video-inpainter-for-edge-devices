@@ -26,7 +26,7 @@ class PerceptualLoss(torch.nn.Module):
 
 # --- CONFIG ---
 TARGET_RES = (256, 256)
-BATCH_SIZE = 1  # Nu kan du køre flere sekvenser ad gangen!
+BATCH_SIZE = 1
 NUM_ITERATIONS = 5000
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -45,7 +45,7 @@ train_loader = DataLoader(
 )
 
 # --- MODEL SETUP ---
-IN_CHANNELS = 5 * 3  # seq_len * RGB
+IN_CHANNELS = 5 * 3 + 5 # seq_len * RGB + mask channels
 model = VideoInpainter(in_channels=IN_CHANNELS, base_channels=128, num_layers=5).to(device)
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 scheduler = CosineAnnealingLR(optimizer, T_max=NUM_ITERATIONS, eta_min=1e-6)
@@ -59,7 +59,6 @@ os.makedirs(save_dir, exist_ok=True)
 print(f"Starting training on {device}...")
 
 def train():
-    # --- TRAINING LOOP ---
     current_iter = 0
     while current_iter < NUM_ITERATIONS:
         for batch_data in train_loader:
@@ -72,12 +71,31 @@ def train():
             batch_data = batch_data.permute(0, 1, 4, 2, 3).to(device)
             B, S, C, H, W = batch_data.shape
 
-            # Split i input (de første frames) og target (den sidste frame)
-            inputs = batch_data.reshape(B, -1, 256, 256)  # (B, (S-1)*C, 256, 256)
+            # 1. Lav masken (B, S, 1, H, W)
+            # Lad os sige vi laver en 80x80 boks med tilfældig placering i hvert billede
+            mask_size = 80
+            y1 = np.random.randint(0, H - mask_size)
+            x1 = np.random.randint(0, W - mask_size)
+
+            masks = torch.zeros((B, S, 1, 256, 256)).to(device)
+            masks[:, :, :, y1:y1 + mask_size, x1:x1 + mask_size] = 1.0
+
+            # 2. FJERN pixels fra billedet (Gør dem sorte)
+            masked_batch = batch_data * (1.0 - masks)
+
+            # 3. Forbered model input (Merge frames til kanaler)
+            # Vi reshaper så vi har (B, 5*3, 256, 256) pixels
+            pixel_input = masked_batch.reshape(B, -1, 256, 256)
+            mask_input = masks.reshape(B, -1, 256, 256)
+
+            # 4. Sæt dem sammen så modellen ser både de sorte billeder og hvor hullerne er
+            # Dette giver en tensor med 20 kanaler (15 RGB + 5 Mask)
+            full_input = torch.cat([pixel_input, mask_input], dim=1)
+
             target = batch_data[:, -1]  # (B, C, 256, 256)
 
             # Model forward
-            output, _ = model(inputs.unsqueeze(1))
+            output, _ = model(full_input.unsqueeze(1))
             output = output.squeeze(1)  # Fjern seq dim igen
 
             # Loss beregning
@@ -99,11 +117,15 @@ def train():
                 target_img = (target[0].detach().cpu().permute(1, 2, 0).numpy() * 255).astype(np.uint8)
                 target_img_bgr = cv2.cvtColor(target_img, cv2.COLOR_RGB2BGR)
 
+                input_img = (masked_batch[0, -1].detach().cpu().permute(1, 2, 0).numpy() * 255).astype(np.uint8)
+
                 out_path = os.path.join(save_dir, f"iter_{current_iter}_output.png")
                 target_path = os.path.join(save_dir, f"iter_{current_iter}_target.png")
 
                 cv2.imwrite(out_path, out_img_bgr)
                 cv2.imwrite(target_path, target_img_bgr)
+                cv2.imwrite(os.path.join(save_dir, f"iter_{current_iter}_input.png"),
+                            cv2.cvtColor(input_img, cv2.COLOR_RGB2BGR))
 
             current_iter += 1
 
