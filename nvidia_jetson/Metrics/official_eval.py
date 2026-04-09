@@ -63,6 +63,7 @@ def _ensure_eval_features(
     eval_feats_root: Path | None,
     metrics: tuple[str, ...],
     python_executable: str,
+    use_cpu: bool = False,
 ) -> Path:
     if eval_feats_root is not None:
         eval_feats_root = Path(eval_feats_root)
@@ -75,14 +76,17 @@ def _ensure_eval_features(
 
     needed = set(metrics)
     if "warp_error" in needed or "warp_error_mask" in needed:
+        flow_args = [
+            f"--gt_root={gt_root}",
+            f"--output_root={eval_feats_root}",
+        ]
+        if use_cpu:
+            flow_args.append("-cpu")
         _run_repo_module(
             repo_root=repo_root,
             python_executable=python_executable,
             module_name="src.main.compute_flow_occlusion",
-            args=[
-                f"--gt_root={gt_root}",
-                f"--output_root={eval_feats_root}",
-            ],
+            args=flow_args,
         )
     if "fid" in needed:
         _run_repo_module(
@@ -95,14 +99,17 @@ def _ensure_eval_features(
             ],
         )
     if "vfid" in needed:
+        vfid_args = [
+            f"--gt_root={gt_root}",
+            f"--output_path={eval_feats_root / 'vfid.npy'}",
+        ]
+        if use_cpu:
+            vfid_args.append("--cpu")
         _run_repo_module(
             repo_root=repo_root,
             python_executable=python_executable,
             module_name="src.main.compute_vfid_features",
-            args=[
-                f"--gt_root={gt_root}",
-                f"--output_path={eval_feats_root / 'vfid.npy'}",
-            ],
+            args=vfid_args,
         )
     if "vfid_clips" in needed:
         _run_repo_module(
@@ -155,6 +162,7 @@ def run_official_synthetic_eval(
     eval_feats_root: str | Path | None = None,
     metrics: str | tuple[str, ...] = ("vfid", "warp_error_mask"),
     python_executable: str = sys.executable,
+    use_cpu: bool = False,
 ) -> dict[str, float]:
     repo_root = Path(repo_root)
     if not repo_root.exists():
@@ -187,6 +195,7 @@ def run_official_synthetic_eval(
             eval_feats_root=eval_feats_root,
             metrics=metrics,
             python_executable=python_executable,
+            use_cpu=use_cpu,
         )
 
         return {

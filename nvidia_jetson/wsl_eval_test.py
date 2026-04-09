@@ -43,6 +43,18 @@ def parse_args() -> argparse.Namespace:
         help="Optional precomputed evaluator features root",
     )
     parser.add_argument(
+        "--official-eval-cpu",
+        action="store_true",
+        help="Force official feature extraction (FlowNet/I3D) to run on CPU",
+    )
+    parser.add_argument(
+        "--metrics",
+        nargs="+",
+        default=["vfid", "warp_error_mask"],
+        choices=["vfid", "warp_error_mask"],
+        help="Official metrics to compute",
+    )
+    parser.add_argument(
         "--out-json",
         type=Path,
         default=None,
@@ -75,8 +87,9 @@ def main() -> None:
         repo_root=args.official_eval_repo,
         output_size=(432, 240),
         eval_feats_root=args.official_eval_feats_root,
-        metrics=("vfid", "warp_error_mask"),
+        metrics=tuple(args.metrics),
         python_executable=sys.executable,
+        use_cpu=args.official_eval_cpu,
     )
 
     summary = {
@@ -85,10 +98,14 @@ def main() -> None:
         "model_name": args.model_name,
         "num_videos": len(videos),
         "pred_root": str(pred_root),
-        "vfid": float(metrics["vfid"]),
-        "ewarp": float(metrics["warp_error_mask"]),
-        "ewarp_x1e2": float(metrics["warp_error_mask"]) * 100.0,
     }
+
+    if "vfid" in metrics:
+        summary["vfid"] = float(metrics["vfid"])
+
+    if "warp_error_mask" in metrics:
+        summary["ewarp"] = float(metrics["warp_error_mask"])
+        summary["ewarp_x1e2"] = float(metrics["warp_error_mask"]) * 100.0
 
     out_json = args.out_json
     if out_json is None:
