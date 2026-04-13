@@ -1,5 +1,6 @@
 import customtkinter as ctk
 import cv2
+print(cv2.getBuildInformation())
 import os
 import time
 
@@ -90,7 +91,7 @@ class MainPage(ctk.CTkFrame):
             self.video_display(frame_direct)
         else:
             self.cap_direct.set(cv2.CAP_PROP_POS_FRAMES, 0) #Replay video when ending
-            
+
         
         if ret_ai:
             self.video_display(frame_ai)

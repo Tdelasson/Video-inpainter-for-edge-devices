@@ -31,7 +31,7 @@ gst_pipeline_out = (
 )
 
 #Opens the camera using the GStream string.
-cap = cv2.VideoCapture(gstreamer_pipeline_in(sensor_id=1), cv2.CAP_GSTREAMER)
+cap = cv2.VideoCapture(gstreamer_pipeline_in(sensor_id=0), cv2.CAP_GSTREAMER)
 
 #OpenCV uses GStreamer to "write" the video onto the network.
 out = cv2.VideoWriter(gst_pipeline_out, cv2.CAP_GSTREAMER, 0, FPS, (WIDTH, HEIGHT), True)

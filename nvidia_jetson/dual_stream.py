@@ -8,7 +8,7 @@ DIRECT_PORT = 5000
 AI_PORT = 5001
 WIDTH = 1280
 HEIGHT = 720
-FPS = 30
+FPS = 60
 
 
 #Generating a GStream-pipeline -> collects the video from the CSI-camera and converts it to a format OpenCV can read.
@@ -27,7 +27,7 @@ def gstreamer_pipeline_in(sensor_id=0, w=WIDTH, h=HEIGHT, fps=FPS):
 def gstreamer_pipeline_out(port):
     return (
         f"appsrc ! "
-        f"video/x-raw, format=BGR, width{WIDTH}, height={HEIGHT}, framerate={FPS}/1 ! "
+        f"video/x-raw, format=BGR, width={WIDTH}, height={HEIGHT}, framerate={FPS}/1 ! "
         f"videoconvert ! "
         f"video/x-raw, format=I420 !"
         f"jpegenc quality=80 ! "
@@ -67,7 +67,8 @@ def ai_thread():
 
 
 #Opens the camera using the GStream string.
-cap = cv2.VideoCapture(gstreamer_pipeline_in(sensor_id=1), cv2.CAP_GSTREAMER)
+cap = cv2.VideoCapture(gstreamer_pipeline_in(sensor_id=0), cv2.CAP_GSTREAMER)
+cap.set(cv2.CAP_PROP_HW_ACCELERATION, cv2.VIDEO_ACCELERATION_ANY)
 
 #OpenCV uses GStreamer to "write" the video onto the network.
 out_direct = cv2.VideoWriter(gstreamer_pipeline_out(DIRECT_PORT), cv2.CAP_GSTREAMER, 0, FPS, (WIDTH, HEIGHT), True)
