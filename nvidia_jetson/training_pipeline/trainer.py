@@ -97,8 +97,8 @@ def train():
                 target = window[:, -1]  # (1, C, H, W)
 
                 # Forward pass, carrying hidden state across windows
-                output, hidden_state = model(full_input, hidden_state)
-                hidden_state = hidden_state.detach()  # detach to prevent backprop through full video history
+                output, _ = model(full_input)
+                #hidden_state = hidden_state.detach()  # detach to prevent backprop through full video history
 
                 # Losses
                 l1_loss = l1_criterion(output, target) * PIXEL_LOSS_WEIGHT
