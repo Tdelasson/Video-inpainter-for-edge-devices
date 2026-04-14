@@ -156,7 +156,7 @@ def train():
 
                 # Losses
                 l1_loss = l1_criterion(composited, target) * PIXEL_LOSS_WEIGHT
-                perceptual_loss, style_loss = perceptual_criterion(output, target)
+                perceptual_loss, style_loss = perceptual_criterion(composited, target)
                 perceptual_loss = perceptual_loss * PERCEPTUAL_LOSS_WEIGHT
                 style_loss = style_loss * STYLE_LOSS_WEIGHT
 
