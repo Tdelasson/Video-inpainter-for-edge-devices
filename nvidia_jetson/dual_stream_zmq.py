@@ -2,13 +2,28 @@ import cv2
 import sys
 import threading
 import queue
+import zmq
 
-PC_IP = "xxx.xxx.xxx.xxx"
+#PC_IP = "xxx.xxx.xxx.xxx"
 DIRECT_PORT = 5000
 AI_PORT = 5001
 WIDTH = 1280
 HEIGHT = 720
 FPS = 60
+
+
+#ZMQ setup
+context = zmq.Context()
+
+#direkte stream socket
+socket_direct = context.socket(zmq.PUB)
+socket_direct.setsockopt(zmq.SNDHWM, 1)
+socket_direct.bind(f"tcp://*:{DIRECT_PORT}")
+
+#AI stream socket
+socket_ai = context.socket(zmq.PUB)
+socket_ai.setsockopt(zmq.SNDHWM, 1)
+socket_ai.bind(f"tcp://*:{AI_PORT}")
 
 
 #Generating a GStream-pipeline -> collects the video from the CSI-camera and converts it to a format OpenCV can read.
@@ -24,28 +39,28 @@ def gstreamer_pipeline_in(sensor_id=0, w=WIDTH, h=HEIGHT, fps=FPS):
 
 #Takes the images and convert it to jpeg such that i can be sent via UDP to the PC host.
 #using jpegenc saves CPU
-def gstreamer_pipeline_out(port):
-    return (
-        f"appsrc ! "
-        f"video/x-raw, format=BGR, width={WIDTH}, height={HEIGHT}, framerate={FPS}/1 ! "
-        f"videoconvert ! "
-        f"video/x-raw, format=I420 !"
-        f"jpegenc quality=80 ! "
-        f"rtpjpegpay ! "
-        f"udpsink host={PC_IP} port={port} sync=false"
-    )    
+# def gstreamer_pipeline_out(port):
+#     return (
+#         f"appsrc ! "
+#         f"video/x-raw, format=BGR, width={WIDTH}, height={HEIGHT}, framerate={FPS}/1 ! "
+#         f"videoconvert ! "
+#         f"video/x-raw, format=I420 !"
+#         f"jpegenc quality=80 ! "
+#         f"rtpjpegpay ! "
+#         f"udpsink host={PC_IP} port={port} sync=false"
+#     )    
 
 
 
 ai_queue = queue.Queue(maxsize=1)
 
-out_ai = None
+#out_ai = None
 
 
 def ai_thread():
-    global out_ai
+    #global out_ai
 
-    out_ai = cv2.VideoWriter(gstreamer_pipeline_out(AI_PORT), cv2.CAP_GSTREAMER, 0, FPS, (WIDTH, HEIGHT), True)
+    #out_ai = cv2.VideoWriter(gstreamer_pipeline_out(AI_PORT), cv2.CAP_GSTREAMER, 0, FPS, (WIDTH, HEIGHT), True)
 
     while True:
         frame = ai_queue.get()
@@ -55,29 +70,24 @@ def ai_thread():
 
         #modellen kaldes på frame her
 
-        if out_ai.isOpened():
-            out_ai.write(frame)
-        
+        #komprimer og send via ZMQ
+        _, buffer = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+        socket_ai.send(buffer)
+
         ai_queue.task_done()
-
-    if out_ai is not None:
-        out_ai.release()
-
-
 
 
 #Opens the camera using the GStream string.
 cap = cv2.VideoCapture(gstreamer_pipeline_in(sensor_id=0), cv2.CAP_GSTREAMER)
-cap.set(cv2.CAP_PROP_HW_ACCELERATION, cv2.VIDEO_ACCELERATION_ANY)
 
 #OpenCV uses GStreamer to "write" the video onto the network.
-out_direct = cv2.VideoWriter(gstreamer_pipeline_out(DIRECT_PORT), cv2.CAP_GSTREAMER, 0, FPS, (WIDTH, HEIGHT), True)
+#out_direct = cv2.VideoWriter(gstreamer_pipeline_out(DIRECT_PORT), cv2.CAP_GSTREAMER, 0, FPS, (WIDTH, HEIGHT), True)
 
 
 #checks if there is connection to the camera and if GStreamer could start udpsink correct
 #if not the program is exited.
-if not cap.isOpened() or not out_direct.isOpened():
-    print("Fejl: Kunne ikke åbne kamera eller netværks-pipeline.")
+if not cap.isOpened():
+    print("Fejl: Kunne ikke åbne kamera.")
     sys.exit()
 
 
@@ -85,8 +95,7 @@ if not cap.isOpened() or not out_direct.isOpened():
 t = threading.Thread(target=ai_thread, daemon=True)
 t.start()
 
-print(f"Streamer nu CAM1 direkte til {PC_IP}:{DIRECT_PORT}...")
-print(f"Streamer AI til {PC_IP}:{AI_PORT}")
+print(f"Streamer nu CAM1 direkte til port:{DIRECT_PORT} og port:{AI_PORT}\n")
 
 
 #starts the main loop which retrieves images from the camera and sendes them
@@ -97,7 +106,9 @@ try:
         if not ret:
             break
 
-        out_direct.write(frame)
+        #out_direct.write(frame)
+        _, buffer_direct = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+        socket_direct.send(buffer_direct)
 
         try:
             ai_queue.put_nowait(frame)
@@ -114,11 +125,9 @@ except KeyboardInterrupt:
 finally:
 
     ai_queue.put(None)
-
     cap.release()
-    out_direct.release()
+    #out_direct.release()
 
     #venter på at AI-tråden er lukket
     t.join(timeout=1.0)
-
     print("Alt er released correct.")
