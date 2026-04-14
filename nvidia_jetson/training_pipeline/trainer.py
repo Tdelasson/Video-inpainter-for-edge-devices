@@ -99,9 +99,23 @@ scheduler = CosineAnnealingLR(optimizer, T_max=NUM_ITERATIONS, eta_min=1e-6)
 perceptual_criterion = PerceptualAndStyleLoss().to(device)
 l1_criterion = torch.nn.L1Loss()
 
-save_dir = "pictures"
+folder_name = (
+    f"BC{BASE_CHANNELS}_"
+    f"L{NUM_LAYERS}_"
+    f"VGG{VGG_FEATURE_LAYER}_"
+    f"SL{SEQ_LEN}_"
+    f"LR{LEARNING_RATE}_"
+    f"PL{PIXEL_LOSS_WEIGHT}_"
+    f"PR{PERCEPTUAL_LOSS_WEIGHT}_"
+    f"T{TEMPORAL_LOSS_WEIGHT}_"
+    f"ST{STYLE_LOSS_WEIGHT}"
+)
+
+# Combine the base 'pictures' directory with our specific run folder
+save_dir = os.path.join("pictures", folder_name)
 os.makedirs(save_dir, exist_ok=True)
 
+print(f"Results will be saved to: {save_dir}")
 print(f"Starting training on {device}...")
 
 def train():
