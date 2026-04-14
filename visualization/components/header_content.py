@@ -34,14 +34,14 @@ class Header(ctk.CTkFrame):
 
         self.buttons = {}
 
-        self.buttons["MainPage"] = HeaderButton(self.btn_group,"Main Page",lambda: self.nav_to("MainPage", controller))
+        self.buttons["MainPage_zmq"] = HeaderButton(self.btn_group,"Main Page",lambda: self.nav_to("MainPage_zmq", controller))
         self.buttons["GuidePage"] = HeaderButton(self.btn_group,"Guide",lambda: self.nav_to("GuidePage", controller))
         self.buttons["AboutUs"] = HeaderButton(self.btn_group,"About Us",lambda: self.nav_to("AboutUs", controller))
 
         for btn in self.buttons.values():
             btn.pack(side="left", expand=True, anchor="w",padx=15)
         
-        self.select_button("Main Page")
+        self.select_button("Main Page_zmq")
 
     def nav_to(self, page_name, controller):
         controller.show_frame(page_name)

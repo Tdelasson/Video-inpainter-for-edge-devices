@@ -11,7 +11,7 @@ from components.theme import Theme
 from PIL import Image
 from collections import deque
 
-JETSON_IP = "xxx.xxx.xxx.xxx"
+JETSON_IP = "192.168.137.108"
 DIRECT_PORT = 5000
 AI_PORT = 5001
 
@@ -50,11 +50,15 @@ class MainPage_zmq(ctk.CTkFrame):
 
 
         self.grid_columnconfigure((0, 1), weight=1)
+        self.display_left = ctk.CTkFrame(self, fg_color=Theme.TP)
+        self.display_left.grid(row=4, column=0, padx=10, pady=20)
+        self.display_left = ctk.CTkLabel(self.display_left, text="")
+        self.display_left.grid(row=4, column=0, padx=10, pady=20)
 
-        self.display_left = ctk.CTkLabel(self, text="")
-        self.display_left = ctk.grid(row=4, column=0, padx=10, pady=20)
-        self.display_right = ctk.CTkLabel(self, text="")
-        self.display_right = ctk.grid(row=4, column=1, padx=10, pady=20)
+
+        self.display_right = ctk.CTkFrame(self, fg_color=Theme.TP)
+        self.display_right = ctk.CTkLabel(self.display_right, text="")
+        self.display_right.grid(row=4, column=1, padx=10, pady=20)
 
 
         self.update_frame()
@@ -62,7 +66,8 @@ class MainPage_zmq(ctk.CTkFrame):
 
     def get_frame_from_zmq(self, socket):
         try:
-            message = socket.recv(zmq)
+            message = socket.recv()
+            # print("Pakke modtaget!")
             data = np.frombuffer(message, dtype=np.uint8)
             frame = cv2.imdecode(data, cv2.IMREAD_COLOR)
             return True, frame
@@ -94,7 +99,7 @@ class MainPage_zmq(ctk.CTkFrame):
         #    self.cap_ai.set(cv2.CAP_PROP_POS_FRAMES, 0) #Replay video when ending
         
 
-        self.after(30, self.update_frame)
+        self.after(1, self.update_frame)
 
 
 

@@ -36,7 +36,7 @@ class App(ctk.CTk):
              self.frames[page_name] = frame
              frame.grid(row=0, column=0, sticky="nsew")
          
-         self.show_frame("MainPage")
+         self.show_frame("MainPage_zmq")
 
          #Run this code when clicking X to close app
         #  self.protocol("WM_DELETE_WINDOW", self.on_closing)
