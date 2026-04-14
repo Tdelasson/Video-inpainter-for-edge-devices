@@ -1,5 +1,5 @@
 import customtkinter as ctk
-from pages.main_page import MainPage
+from pages.main_page_zmq import MainPage_zmq
 from pages.guide_page import GuidePage
 from pages.about_us_page import AboutUs
 from components.header_content import Header
@@ -30,7 +30,7 @@ class App(ctk.CTk):
          #Initialize frames
          self.frames = {}
 
-         for F in (MainPage, GuidePage, AboutUs):
+         for F in (MainPage_zmq, GuidePage, AboutUs):
              page_name = F.__name__
              frame = F(parent=container, controller=self)
              self.frames[page_name] = frame

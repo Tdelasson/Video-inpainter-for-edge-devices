@@ -29,7 +29,7 @@ AI_PORT = 5001
 
 
 
-class MainPage(ctk.CTkFrame):
+class MainPage_zmq(ctk.CTkFrame):
     def __init__(self, parent, controller):
         super().__init__(parent, fg_color=Theme.WHITE)
         #self.is_active = True
