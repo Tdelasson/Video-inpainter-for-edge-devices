@@ -1,79 +1,12 @@
 import os
 import cv2
-import torch
 import torch.optim as optim
-import numpy as np
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from torchvision.models import vgg16, VGG16_Weights
-from training_pipeline.config import *
-
 from training_pipeline.dataset import YouTubeVOSDataset
 from model_architecture.video_inpainter import VideoInpainter
 from training_pipeline.mask_generator import *
-
-
-class PerceptualAndStyleLoss(torch.nn.Module):
-    def __init__(self):
-        super(PerceptualAndStyleLoss, self).__init__()
-        vgg = vgg16(weights=VGG16_Weights.IMAGENET1K_V1).features.eval()
-        for param in vgg.parameters():
-            param.requires_grad = False
-
-        # Extract features at multiple layers
-        # pool1=4, pool2=9, pool3=16
-        self.slice1 = vgg[:5]  # up to pool1
-        self.slice2 = vgg[5:10]  # up to pool2
-        self.slice3 = vgg[10:17]  # up to pool3
-
-        self.l1 = torch.nn.L1Loss()
-
-        # ImageNet normalization — VGG was trained with these
-        self.register_buffer('mean', torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1))
-        self.register_buffer('std', torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1))
-
-    def normalize(self, x):
-        return (x - self.mean) / self.std
-
-    def gram_matrix(self, features):
-        B, C, H, W = features.shape
-        # Reshape to (B, C, H*W)
-        f = features.view(B, C, H * W)
-        # Gram matrix: (B, C, C)
-        gram = torch.bmm(f, f.transpose(1, 2))
-        # Normalize by number of elements
-        return gram / (C * H * W)
-
-    def forward(self, output, target):
-        # Normalize before passing to VGG
-        output = self.normalize(output)
-        target = self.normalize(target)
-
-        # Get features at each layer for both output and target
-        out1 = self.slice1(output)
-        out2 = self.slice2(out1)
-        out3 = self.slice3(out2)
-
-        with torch.no_grad():
-            tgt1 = self.slice1(target)
-            tgt2 = self.slice2(tgt1)
-            tgt3 = self.slice3(tgt2)
-
-        # Perceptual loss: feature map distances
-        perceptual_loss = (
-                self.l1(out1, tgt1) +
-                self.l1(out2, tgt2) +
-                self.l1(out3, tgt3)
-        )
-
-        # Style loss: Gram matrix distances
-        style_loss = (
-                self.l1(self.gram_matrix(out1), self.gram_matrix(tgt1)) +
-                self.l1(self.gram_matrix(out2), self.gram_matrix(tgt2)) +
-                self.l1(self.gram_matrix(out3), self.gram_matrix(tgt3))
-        )
-
-        return perceptual_loss, style_loss
+from training_pipeline.inpainting_loss import InpaintingLoss
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -81,12 +14,11 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 root_dir = os.getcwd()
 train_path = os.path.join(root_dir, "training_data", "train")
 dataset = YouTubeVOSDataset(root_dir=train_path)
-
 train_loader = DataLoader(
     dataset,
     batch_size=BATCH_SIZE,
     shuffle=True,
-    num_workers = 0,  # multiple cpu cores loads data, 0 on windows, 4 or more on linux
+    num_workers = 4,  # multiple cpu cores loads data, 0 on windows, 4 or more on linux
     drop_last=True,
 )
 
@@ -95,14 +27,17 @@ IN_CHANNELS = SEQ_LEN * 3 + SEQ_LEN # per frame 3 RGBs + 1 mask channels
 model = VideoInpainter(in_channels=IN_CHANNELS, base_channels=BASE_CHANNELS, num_layers=NUM_LAYERS).to(device)
 optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 scheduler = CosineAnnealingLR(optimizer, T_max=NUM_ITERATIONS, eta_min=1e-6)
+criterion = InpaintingLoss(
+    pixel_w=PIXEL_LOSS_WEIGHT,
+    perceptual_w=PERCEPTUAL_LOSS_WEIGHT,
+    style_w=STYLE_LOSS_WEIGHT,
+    temporal_w=TEMPORAL_LOSS_WEIGHT
+).to(device)
 
-perceptual_criterion = PerceptualAndStyleLoss().to(device)
-l1_criterion = torch.nn.L1Loss()
-
+# --- RESULT SAVING SETUP ---
 folder_name = (
     f"BC{BASE_CHANNELS}_"
     f"L{NUM_LAYERS}_"
-    f"VGG{VGG_FEATURE_LAYER}_"
     f"SL{SEQ_LEN}_"
     f"LR{LEARNING_RATE}_"
     f"PL{PIXEL_LOSS_WEIGHT}_"
@@ -110,14 +45,12 @@ folder_name = (
     f"T{TEMPORAL_LOSS_WEIGHT}_"
     f"ST{STYLE_LOSS_WEIGHT}"
 )
-
-# Combine the base 'pictures' directory with our specific run folder
-save_dir = os.path.join("pictures", folder_name)
+save_dir = os.path.join("results", folder_name)
 os.makedirs(save_dir, exist_ok=True)
-
 print(f"Results will be saved to: {save_dir}")
-print(f"Starting training on {device}...")
 
+# --- TRAINING LOOP ---
+print(f"Starting training on {device}...")
 def train():
     current_iter = 0
     while current_iter < NUM_ITERATIONS:
@@ -169,18 +102,9 @@ def train():
                 composited = output * current_mask + target * (1 - current_mask)
 
                 # Losses
-                l1_loss = l1_criterion(composited, target) * PIXEL_LOSS_WEIGHT
-                perceptual_loss, style_loss = perceptual_criterion(composited, target)
-                perceptual_loss = perceptual_loss * PERCEPTUAL_LOSS_WEIGHT
-                style_loss = style_loss * STYLE_LOSS_WEIGHT
-
-                if prev_output is not None:
-                    temporal_loss = l1_criterion(composited, prev_output.detach()) * TEMPORAL_LOSS_WEIGHT
-                else:
-                    temporal_loss = torch.tensor(0.0, device=device)
+                total_loss, l1_v, perc_v, style_v, temp_v = criterion(composited, target, prev_output)
 
                 prev_output = composited
-                total_loss = l1_loss + perceptual_loss + style_loss + temporal_loss
 
                 total_loss.backward()
                 optimizer.step()
@@ -191,10 +115,10 @@ def train():
                     print(
                         f"Iter {current_iter} | "
                         f"Total: {total_loss.item():.4f} | "
-                        f"L1: {l1_loss.item():.4f} | "
-                        f"Perceptual: {perceptual_loss.item():.4f} | "
-                        f"Style: {style_loss.item():.4f} | "
-                        f"Temporal: {temporal_loss.item():.4f}",
+                        f"L1: {l1_v.item():.4f} | "
+                        f"Perceptual: {perc_v.item():.4f} | "
+                        f"Style: {style_v.item():.4f} | "
+                        f"Temporal: {temp_v.item():.4f}",
                         flush=True
                     )
 
@@ -214,7 +138,9 @@ def train():
 
                 current_iter += 1
 
-    print("Training Done!")
+    torch.save(model.state_dict(), save_dir)
+    print(f"Training Done! Model saved to: {save_dir}")
+
 
 if __name__ == '__main__':
     train()

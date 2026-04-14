@@ -2,7 +2,7 @@ from training_pipeline.config import *
 import torch
 import numpy as np
 
-def generate_random_square_mask(video: torch.Tensor) -> tuple[torch.Tensor]:
+def generate_random_square_mask(video: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     B, T, C, H, W = video.shape
     mask_size = np.random.randint(MASK_SIZE_RANGE[0], MASK_SIZE_RANGE[1])
     y1 = np.random.randint(0, H - mask_size)
@@ -15,7 +15,7 @@ def generate_random_square_mask(video: torch.Tensor) -> tuple[torch.Tensor]:
     masked_video = video * (1.0 - masks)
     return masked_video, masks
 
-def generate_flying_square_mask(video: torch.Tensor) -> tuple[torch.Tensor]:
+def generate_flying_square_mask(video: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     B, T, C, H, W = video.shape
     mask_size = np.random.randint(MASK_SIZE_RANGE[0], MASK_SIZE_RANGE[1])
     y1 = np.random.randint(0, H - mask_size)
@@ -34,8 +34,8 @@ def generate_flying_square_mask(video: torch.Tensor) -> tuple[torch.Tensor]:
     masked_video = video * (1.0 - masks)
     return masked_video, masks
 
-def generate_arbitrary_shape_mask(video: torch.Tensor) -> tuple[torch.Tensor]:
+def generate_arbitrary_shape_mask(video: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     pass
 
-def generate_video_object_mask(video: torch.Tensor) -> tuple[torch.Tensor]:
+def generate_video_object_mask(video: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     pass

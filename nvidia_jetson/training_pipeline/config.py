@@ -2,7 +2,6 @@ TARGET_RES = (256, 256)
 SEQ_LEN = 5
 BASE_CHANNELS = 64
 NUM_LAYERS = 3
-VGG_FEATURE_LAYER = 16 # 9 for finer details, 16 for more larger structures
 
 # Training hyperparameters
 BATCH_SIZE = 1
