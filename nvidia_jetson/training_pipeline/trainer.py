@@ -165,7 +165,7 @@ def train():
                 else:
                     temporal_loss = torch.tensor(0.0, device=device)
 
-                prev_output = output
+                prev_output = composited
                 total_loss = l1_loss + perceptual_loss + style_loss + temporal_loss
 
                 total_loss.backward()
@@ -185,7 +185,7 @@ def train():
                     )
 
                 if current_iter % 500 == 0:
-                    out_img = (output[0].detach().cpu().permute(1, 2, 0).numpy() * 255).astype(np.uint8)
+                    out_img = (composited[0].detach().cpu().permute(1, 2, 0).numpy() * 255).astype(np.uint8)
                     out_img_bgr = cv2.cvtColor(out_img, cv2.COLOR_RGB2BGR)
 
                     target_img = (target[0].detach().cpu().permute(1, 2, 0).numpy() * 255).astype(np.uint8)
