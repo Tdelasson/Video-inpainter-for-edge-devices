@@ -1,0 +1,11 @@
+{
+  "model": "FuseFormer_OM",
+  "dataset": "DAVIS",
+  "mask_type": "Synthetic",
+  "num_videos": 5,
+  "psnr": 31.2307,
+  "ssim": 0.9436,
+  "vfid": 0.2843,
+  "ewarp": 0.000807,
+  "ewarp_x1e2": 0.081
+}
