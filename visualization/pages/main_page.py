@@ -3,6 +3,12 @@ import cv2
 print(cv2.getBuildInformation())
 import os
 import time
+if r"C:\Python312\Scripts" in os.environ["PATH"]:
+    os.environ["PATH"] = os.environ["PATH"].replace(r"C:\Python312", "")
+
+conda_path = os.path.dirname(sys.executable)
+gst_bin = os.path.join(conda_path, "Library", "bin")
+os.environ["PATH"] = gst_bin + os.pathsep + os.environ["PATH"]
 
 from components.header_content import Header
 from components.text import BodyText
@@ -19,11 +25,12 @@ AI_PORT = 5001
 def gstreamer_pipelin_on_pc(port):
     return (
         f"udpsrc port={port} ! "
-        f"application/x-rtp, encoding-name=JPEG, payload=26 !"
-        f"rtpjpegdepay ! "
-        f"jpegdec ! "
-        f"videoconvert ! "
-        f"appsink"
+        f"application/x-rtp,encoding-name=JPEG,payload=26 ! "
+        f"rtpjpegdepay ! queue ! "
+        f"jpegdec ! queue ! "
+        f"videoconvert ! queue ! "
+        f"video/x-raw,format=BGR ! "
+        f"appsink drop=true max-buffer=1 sync=false"
     )
 
 
@@ -38,6 +45,10 @@ class MainPage(ctk.CTkFrame):
         #video_path = os.path.join(base_path, "assets", "video_placeholder.mp4")
 
         self.cap_direct = cv2.VideoCapture(gstreamer_pipelin_on_pc(DIRECT_PORT), cv2.CAP_GSTREAMER)
+        if not self.cap_direct.isOpened():
+            print("ADVARSEL", DIRECT_PORT)
+            print(self.cap_direct.isOpened())
+
         self.cap_ai = cv2.VideoCapture(gstreamer_pipelin_on_pc(AI_PORT), cv2.CAP_GSTREAMER)
 
         self.grid_columnconfigure((0, 1), weight=1)
@@ -87,19 +98,26 @@ class MainPage(ctk.CTkFrame):
         ret_direct, frame_direct = self.cap_direct.read() #Tries to read frame
         ret_ai, frame_ai = self.cap_ai.read()
 
+        print("DIRECT:", ret_direct)
+        print("AI:", ret_ai)
+
         if ret_direct:
-            self.video_display(frame_direct)
+            ctk_img_left = self.video_display(frame_direct)
+            self.display_left.configure(image=ctk_img_left)
+            self.display_left.image = ctk_img_left
         else:
             self.cap_direct.set(cv2.CAP_PROP_POS_FRAMES, 0) #Replay video when ending
 
         
         if ret_ai:
-            self.video_display(frame_ai)
+            ctk_img_right = self.video_display(frame_ai)
+            self.display_right.configure(image=ctk_img_right)
+            self.display_right.image = ctk_img_right
         else:
             self.cap_ai.set(cv2.CAP_PROP_POS_FRAMES, 0) #Replay video when ending
         
 
-        self.after(30, self.update_frame)
+        self.after(60, self.update_frame)
 
 
 
@@ -108,10 +126,8 @@ class MainPage(ctk.CTkFrame):
             frame = cv2.resize(frame, (500, 300)) #Shrinking for better CPU performance
             cv2_img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             pil_img = Image.fromarray(cv2_img)
-            ctk_img = ctk.CTkImage(light_image=pil_img, size=(500, 300)) #UI size
-            
-            self.display_left.configure(image=ctk_img)
-            self.display_right.configure(image=ctk_img)
+            return ctk.CTkImage(light_image=pil_img, size=(500, 300)) #UI size
+        
 
     #def calculations():
         # time_end = time.time()

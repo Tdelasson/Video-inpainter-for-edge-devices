@@ -39,7 +39,7 @@ class App(ctk.CTk):
          self.show_frame("MainPage")
 
          #Run this code when clicking X to close app
-         self.protocol("WM_DELETE_WINDOW", self.on_closing)
+        #  self.protocol("WM_DELETE_WINDOW", self.on_closing)
     
     def show_frame(self, page_name):
         frame = self.frames[page_name]
@@ -48,10 +48,10 @@ class App(ctk.CTk):
         self.update_idletasks()
         self.header.select_button(page_name)
     
-    def on_closing(self):
-        if "MainPage" in self.frames:
-            self.frames["MainPage"].cap.release()
-            self.destroy()
+    # def on_closing(self):
+    #     if "MainPage" in self.frames:
+    #         self.frames["MainPage"].cap.release()
+    #         self.destroy()
     
 if __name__ == "__main__":
     app = App()
