@@ -28,7 +28,8 @@ model = VideoInpainter(in_channels=IN_CHANNELS, base_channels=BASE_CHANNELS, num
 optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 scheduler = CosineAnnealingLR(optimizer, T_max=NUM_ITERATIONS, eta_min=1e-6)
 criterion = InpaintingLoss(
-    pixel_w=PIXEL_LOSS_WEIGHT,
+    pixel_m_w=MASK_PIXEL_LOSS_WEIGHT,
+    pixel_f_w=FRAME_PIXEL_LOSS_WEIGHT,
     perceptual_w=PERCEPTUAL_LOSS_WEIGHT,
     style_w=STYLE_LOSS_WEIGHT,
     temporal_w=TEMPORAL_LOSS_WEIGHT
@@ -40,7 +41,8 @@ folder_name = (
     f"L{NUM_LAYERS}_"
     f"SL{SEQ_LEN}_"
     f"LR{LEARNING_RATE}_"
-    f"PL{PIXEL_LOSS_WEIGHT}_"
+    f"PLM{MASK_PIXEL_LOSS_WEIGHT}_"
+    f"PLF{FRAME_PIXEL_LOSS_WEIGHT}_"
     f"PR{PERCEPTUAL_LOSS_WEIGHT}_"
     f"T{TEMPORAL_LOSS_WEIGHT}_"
     f"ST{STYLE_LOSS_WEIGHT}"
@@ -92,19 +94,18 @@ def train():
 
                 # Target is the last frame of the window unmasked
                 target = window[:, -1]
+                target_mask = masks_window[:, -1]
 
                 # Forward pass, carrying hidden state across windows
                 output, _ = model(full_input)
                 # hidden_state = hidden_state.detach()
+                total_loss, l1_m, l1_f, perc_v, style_v, temp_v = criterion(output, target, target_mask, prev_output)
 
                 # Composite: use model output only where masked, original pixels elsewhere
                 current_mask = masks_window[:, -1]  # (B, 1, H, W) — mask for target frame
-                composited = output * current_mask + target * (1 - current_mask)
-
-                # Losses
-                total_loss, l1_v, perc_v, style_v, temp_v = criterion(composited, target, prev_output)
-
-                prev_output = composited
+                with torch.no_grad():
+                    composited = output * current_mask + target * (1 - current_mask)
+                    prev_output = composited  # We use the clean "composited" version for the next frame's memory
 
                 total_loss.backward()
                 optimizer.step()
@@ -115,7 +116,8 @@ def train():
                     print(
                         f"Iter {current_iter} | "
                         f"Total: {total_loss.item():.4f} | "
-                        f"L1: {l1_v.item():.4f} | "
+                        f"L1M: {l1_m.item():.4f} | "
+                        f"L1F: {l1_f.item():.4f} | "
                         f"Perceptual: {perc_v.item():.4f} | "
                         f"Style: {style_v.item():.4f} | "
                         f"Temporal: {temp_v.item():.4f}",
@@ -138,7 +140,7 @@ def train():
 
                 current_iter += 1
 
-    torch.save(model.state_dict(), save_dir)
+    torch.save(model.state_dict(), os.path.join(save_dir, "model.pth"))
     print(f"Training Done! Model saved to: {save_dir}")
 
 

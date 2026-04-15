@@ -2,7 +2,7 @@ import torch
 from torchvision.models import vgg16, VGG16_Weights
 
 class InpaintingLoss(torch.nn.Module):
-    def __init__(self, pixel_w, perceptual_w, style_w, temporal_w):
+    def __init__(self, pixel_m_w, pixel_f_w, perceptual_w, style_w, temporal_w):
         super(InpaintingLoss, self).__init__()
         # Load VGG for Perceptual/Style
         vgg = vgg16(weights=VGG16_Weights.IMAGENET1K_V1).features.eval()
@@ -16,7 +16,8 @@ class InpaintingLoss(torch.nn.Module):
         self.l1 = torch.nn.L1Loss()
 
         # Weights
-        self.pixel_w = pixel_w
+        self.pixel_m_w = pixel_m_w
+        self.pixel_f_w = pixel_f_w
         self.perceptual_w = perceptual_w
         self.style_w = style_w
         self.temporal_w = temporal_w
@@ -34,9 +35,15 @@ class InpaintingLoss(torch.nn.Module):
         gram = torch.bmm(f, f.transpose(1, 2))
         return gram / (C * H * W)
 
-    def forward(self, output, target, prev_output=None):
-        # Pixel (L1) Loss
-        l1_loss = self.l1(output, target) * self.pixel_w
+    def forward(self, output, target, mask, prev_output=None):
+        if mask.shape[1] != output.shape[1]:
+            mask = mask.expand_as(output)
+
+        # Pixel Loss for the mask (High weight)
+        l1_mask = self.l1(output * mask, target * mask) * self.pixel_m_w * 10.0
+
+        # Pixel Loss for the entire frame (Low weight - helps blending)
+        l1_frame = self.l1(output * (1 - mask), target * (1 - mask)) * self.pixel_f_w * 1.0
 
         # Perceptual and Style Loss
         norm_output = self.normalize(output)
@@ -64,6 +71,6 @@ class InpaintingLoss(torch.nn.Module):
         if prev_output is not None:
             temporal_loss = self.l1(output, prev_output.detach()) * self.temporal_w
 
-        total_loss = l1_loss + perceptual_loss + style_loss + temporal_loss
+        total_loss = l1_mask + l1_frame + perceptual_loss + style_loss + temporal_loss
 
-        return total_loss, l1_loss, perceptual_loss, style_loss, temporal_loss
+        return total_loss, l1_mask, l1_frame, perceptual_loss, style_loss, temporal_loss
