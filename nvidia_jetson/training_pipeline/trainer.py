@@ -57,6 +57,7 @@ folder_name = (
     f"PR{PERCEPTUAL_LOSS_WEIGHT}_"
     f"T{TEMPORAL_LOSS_WEIGHT}_"
     f"ST{STYLE_LOSS_WEIGHT}"
+    f"ADV{ADVERSARIAL_LOSS_WEIGHT}_"
 )
 save_dir = os.path.join("results", folder_name)
 os.makedirs(save_dir, exist_ok=True)
