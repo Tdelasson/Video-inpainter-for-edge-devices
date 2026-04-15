@@ -163,11 +163,7 @@ def train():
                 # --- LOGGING ---
                 if current_iter % 10 == 0:
                     print(
-                        f"Iter {current_iter} | Total: {g_total_loss.item():.4f} | "
-                        f"L1M: {l1_m.item():.4f} | L1F: {l1_f.item():.4f} | "
-                        f"Adv: {g_adv.item():.4f} | Temp: {temp_v.item():.4f}",
-                        flush=True
-                    )
+                        f"Iter {current_iter} | Total: {g_total_loss.item():.4f} | Adv: {g_adv.item():.4f} | Temp: {temp_v.item():.4f}")
 
                 # --- SAVING IMAGES ---
                 if current_iter % 500 == 0:
