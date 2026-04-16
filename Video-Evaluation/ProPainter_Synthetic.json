@@ -1,0 +1,12 @@
+{
+  "model": "ProPainter",
+  "fp16": true,
+  "dataset": "DAVIS",
+  "mask_type": "synthetic",
+  "num_videos": 50,
+  "psnr": 31.9318,
+  "ssim": 0.9471,
+  "vfid": 0.2103,
+  "ewarp": 0.001037,
+  "ewarp_x1e2": 0.104
+}
