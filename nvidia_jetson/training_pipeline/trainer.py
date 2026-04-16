@@ -20,10 +20,12 @@ from training_pipeline.inpainting_loss import InpaintingLoss
 from torchvision.models.optical_flow import raft_small, Raft_Small_Weights
 from training_pipeline.discriminator import SpatioTemporalDiscriminator
 import argparse
+import json
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Train Video Inpainter Phase")
+    parser.add_argument("--model_name", type=str, required=True, help="Master folder name (e.g. MyModel_V1)")
     parser.add_argument("--phase_name", type=str, required=True, help="Folder name for results")
     parser.add_argument("--iterations", type=int, required=True, default=20000)
     parser.add_argument("--resume_from", type=str, default=None, help="Path to checkpoint .pth")
@@ -38,12 +40,12 @@ def parse_args():
     parser.add_argument("--use_memory", action="store_true", help="Enable persistent ConvGRU state")
 
     # Loss Weights
-    parser.add_argument("--w_pixel_m", type=float, default=MASK_PIXEL_LOSS_WEIGHT)
-    parser.add_argument("--w_pixel_f", type=float, default=FRAME_PIXEL_LOSS_WEIGHT)
-    parser.add_argument("--w_perc", type=float, default=PERCEPTUAL_LOSS_WEIGHT)
-    parser.add_argument("--w_style", type=float, default=STYLE_LOSS_WEIGHT)
-    parser.add_argument("--w_temp", type=float, default=TEMPORAL_LOSS_WEIGHT)
-    parser.add_argument("--w_adv", type=float, default=ADVERSARIAL_LOSS_WEIGHT)
+    parser.add_argument("--w_pixel_m", type=float, required=True)
+    parser.add_argument("--w_pixel_f", type=float, required=True)
+    parser.add_argument("--w_perc", type=float, required=True)
+    parser.add_argument("--w_style", type=float, required=True)
+    parser.add_argument("--w_temp", type=float, required=True)
+    parser.add_argument("--w_adv", type=float, required=True)
 
     return parser.parse_args()
 
@@ -57,6 +59,8 @@ def train(args, model, flow_model, discriminator, train_loader, optimizer_model,
         "youtube": generate_video_object_mask
     }
     generate_mask = mask_generators[args.mask_type]
+
+    metrics_history = {"total": [], "mask": [], "frame": [], "perc": [], "style": [], "temp": [], "adv": []}
 
     current_iter = 0
     print(f"Starting Phase: {args.phase_name} | Mask: {args.mask_type} | Memory: {args.use_memory}")
@@ -75,6 +79,9 @@ def train(args, model, flow_model, discriminator, train_loader, optimizer_model,
             masked_video, masks = generate_mask(video_data)
 
             for t in range(0, T - args.seq_len + 1):
+                if current_iter >= args.iterations:
+                    break
+
                 if not args.use_memory:
                     hidden_state = None
 
@@ -131,6 +138,15 @@ def train(args, model, flow_model, discriminator, train_loader, optimizer_model,
                 scheduler_model.step()
                 scheduler_disc.step()
 
+                #Add parameters to metrics_history for logging
+                metrics_history["total"].append(total_loss.item())
+                metrics_history["mask"].append(l1_m.item())
+                metrics_history["frame"].append(l1_f.item())
+                metrics_history["perc"].append(perc_v.item())
+                metrics_history["style"].append(style_v.item())
+                metrics_history["temp"].append(temp_v.item())
+                metrics_history["adv"].append(adv.item())
+
                 # Prep for next window
                 with torch.no_grad():
                     composited = output * target_mask + target * (1 - target_mask)
@@ -154,6 +170,11 @@ def train(args, model, flow_model, discriminator, train_loader, optimizer_model,
 
                 current_iter += 1
 
+            if current_iter >= args.iterations:
+                break
+
+        return {k: np.mean(v) for k, v in metrics_history.items()}
+
 def save_previews(save_dir, it, comp, tgt, m_win):
     out_img = (comp[0].detach().cpu().permute(1, 2, 0).numpy() * 255).astype(np.uint8)
     target_img = (tgt[0].detach().cpu().permute(1, 2, 0).numpy() * 255).astype(np.uint8)
@@ -169,8 +190,11 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Save Directory
-    save_dir = os.path.join("results", args.phase_name)
+    master_folder = args.model_name if args.model_name else f"Model_BC{BASE_CHANNELS}_L{NUM_LAYERS}"
+    save_dir = os.path.join("results", master_folder, args.phase_name)
     os.makedirs(save_dir, exist_ok=True)
+
+    print(f"Saving this phase to: {save_dir}")
 
     # Models
     in_channels = args.seq_len * 3 + args.seq_len
@@ -202,8 +226,22 @@ def main():
     loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=4, drop_last=True)
 
     # Start Training
-    train(args, model, flow_model, discriminator, loader, opt_model, opt_disc, scheduler_model, scheduler_disc, criterion,
+    final_metrics = train(args, model, flow_model, discriminator, loader, opt_model, opt_disc, scheduler_model, scheduler_disc, criterion,
           adv_crit, device, save_dir)
+
+    log_data = {
+        "hyperparameters": vars(args),
+        "final_metrics": final_metrics,
+        "config_constants": {
+            "TARGET_RES": TARGET_RES,
+            "MASK_SPEED": MASK_PIXEL_MOVEMENT_SPEED,
+            "MASK_SIZE": MASK_SIZE_RANGE,
+            "BASE_CHANNELS": BASE_CHANNELS,
+            "NUM_LAYERS": NUM_LAYERS
+        }
+    }
+    with open(os.path.join(save_dir, "phase_log.json"), "w") as f:
+        json.dump(log_data, f, indent=4)
 
     torch.save(model.state_dict(), os.path.join(save_dir, "final_model.pth"))
 
