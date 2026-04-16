@@ -128,11 +128,6 @@ class ProPainterAdapter(BaseVideoInpainter):
         flow_masks_t = torch.from_numpy(flow_masks_np).permute(0, 3, 1, 2).float().unsqueeze(0).to(self.device)
         masks_dilated_t = torch.from_numpy(masks_dilated_np).permute(0, 3, 1, 2).float().unsqueeze(0).to(self.device)
 
-        if self.use_half:
-            frames_t = frames_t.half()
-            flow_masks_t = flow_masks_t.half()
-            masks_dilated_t = masks_dilated_t.half()
-
         return frames_t, flow_masks_t, masks_dilated_t, resized_frames
 
     def _infer(
@@ -176,6 +171,10 @@ class ProPainterAdapter(BaseVideoInpainter):
                 self._empty_cuda_cache()
 
             if self.use_half:
+                # RAFT stays fp32; cast only after RAFT for fp16 ProPainter modules.
+                frames = frames.half()
+                flow_masks = flow_masks.half()
+                masks_dilated = masks_dilated.half()
                 gt_flows_bi = (gt_flows_bi[0].half(), gt_flows_bi[1].half())
 
             flow_length = gt_flows_bi[0].size(1)
