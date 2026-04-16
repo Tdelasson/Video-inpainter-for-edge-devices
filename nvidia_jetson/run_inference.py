@@ -215,6 +215,8 @@ def main() -> None:
             split_metrics.append(video_metrics)
 
         summary = {
+            "model": adapter.name,
+            "fp16": bool(args.fp16),
             "dataset": dataset_name,
             "mask_type": mask_type,
             "num_videos": len(split_metrics),
@@ -259,9 +261,11 @@ def main() -> None:
                 )
                 summary["ewarp"] = round(float(official_ewarp["warp_error_mask"]), 6)
                 summary["ewarp_x1e2"] = round(float(official_ewarp["warp_error_mask"]) * 100.0, 4)
+                summary["ewarp_x1e3"] = round(float(official_ewarp["warp_error_mask"]) * 1000.0, 4)
             except Exception as exc:
                 summary["ewarp"] = None
                 summary["ewarp_x1e2"] = None
+                summary["ewarp_x1e3"] = None
                 summary["official_eval_error_ewarp"] = str(exc)
 
         summary_dir = split_root
