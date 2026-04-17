@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Evaluation metrics for video inpainting.
 
@@ -64,9 +66,44 @@ def compute_ssim(img1: np.ndarray, img2: np.ndarray) -> float:
     assert img1.shape == img2.shape, (
         f"Image shapes differ: {img1.shape} vs {img2.shape}"
     )
-    return structural_similarity(
-        img1, img2, data_range=255, channel_axis=2, win_size=65
-    )
+    h, w = img1.shape[:2]
+    win_size = min(65, h, w)
+    if win_size % 2 == 0:
+        win_size -= 1
+
+    try:
+        # skimage >= 0.19
+        return float(
+            structural_similarity(
+                img1,
+                img2,
+                data_range=255,
+                channel_axis=2,
+                win_size=win_size,
+            )
+        )
+    except TypeError:
+        # skimage < 0.19
+        return float(
+            structural_similarity(
+                img1,
+                img2,
+                data_range=255,
+                multichannel=True,
+                win_size=win_size,
+            )
+        )
+    except ValueError:
+        # Some older builds ignore channel_axis and require multichannel explicitly.
+        return float(
+            structural_similarity(
+                img1,
+                img2,
+                data_range=255,
+                multichannel=True,
+                win_size=win_size,
+            )
+        )
 
 
 # ============================================================

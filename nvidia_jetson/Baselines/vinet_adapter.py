@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -33,7 +35,8 @@ class _ViNetOptions:
 
 
 def _import_vinet_class():
-    sys.path.insert(0, _BASELINE_DIR)
+    if _BASELINE_DIR not in sys.path:
+        sys.path.insert(0, _BASELINE_DIR)
     try:
         from models.vinet import VINet_final
 
@@ -43,8 +46,6 @@ def _import_vinet_class():
             "Failed to import ViNET. Build Deep-Video-Inpainting CUDA extensions first: "
             "run Baselines_Repos/Deep-Video-Inpainting-master/install.sh"
         ) from exc
-    finally:
-        sys.path.remove(_BASELINE_DIR)
 
 
 def _reflect_index(index: int, length: int) -> int:
@@ -166,7 +167,7 @@ class ViNETAdapter(BaseVideoInpainter):
         prev_mask = None
         lstm_state = None
 
-        with torch.inference_mode():
+        with torch.no_grad():
             for t in range(num_frames):
                 masked_window, mask_window = self._build_temporal_window(masked_inputs, masks_t, t)
 

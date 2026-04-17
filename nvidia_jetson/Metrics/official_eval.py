@@ -1,4 +1,6 @@
 from __future__ import annotations
+from __future__ import annotations
+
 import subprocess
 import sys
 import tempfile
@@ -132,7 +134,7 @@ def _run_official_metric(
     metric_key: str,
     python_executable: str,
 ) -> float:
-    output_path = gt_root.parent / f"{metric_key}.npy"
+    output_path = gt_root.parent / f"{metric_key}.npz"
     cmd = [
         python_executable,
         "-m",
@@ -145,9 +147,13 @@ def _run_official_metric(
     ]
     subprocess.run(cmd, cwd=repo_root, check=True)
 
-    results = np.load(output_path, allow_pickle=True)
-    if hasattr(results, "item"):
-        results = results.item()
+    results_obj = np.load(output_path, allow_pickle=True)
+    if isinstance(results_obj, np.lib.npyio.NpzFile):
+        results = {k: results_obj[k] for k in results_obj.files}
+    elif hasattr(results_obj, "item"):
+        results = results_obj.item()
+    else:
+        raise RuntimeError(f"Unexpected official metric output format: {type(results_obj)}")
 
     if metric_key not in results:
         raise KeyError(f"Metric '{metric_key}' not found in official evaluation output")
