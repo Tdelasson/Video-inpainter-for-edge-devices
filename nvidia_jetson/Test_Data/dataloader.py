@@ -35,10 +35,17 @@ class TestDataset:
             print(video.name, len(video.frames))
     """
 
-    def __init__(self, data_root: str, dataset: str, mask_type: str = "synthetic"):
+    def __init__(
+        self,
+        data_root: str,
+        dataset: str,
+        mask_type: str = "synthetic",
+        frames_subdir: str = "JPEGImages",
+    ):
         self.data_root = Path(data_root)
         self.dataset = dataset
         self.mask_type = mask_type
+        self.frames_subdir = frames_subdir
 
         # --- Validate inputs ---
         if dataset not in ("DAVIS", "YouTube-VOS"):
@@ -49,7 +56,7 @@ class TestDataset:
             raise ValueError("RealObject masks are only available for the DAVIS dataset")
 
         # --- Set up directory paths ---
-        self.frames_dir = self.data_root / dataset / "JPEGImages"
+        self.frames_dir = self.data_root / dataset / self.frames_subdir
         if mask_type == "synthetic":
             self.masks_dir = self.data_root / dataset / "SyntheticMasks"
         else:
@@ -162,5 +169,5 @@ class TestDataset:
     def __repr__(self) -> str:
         return (
             f"TestDataset(dataset='{self.dataset}', "
-            f"mask_type='{self.mask_type}', videos={len(self)})"
+            f"mask_type='{self.mask_type}', frames_subdir='{self.frames_subdir}', videos={len(self)})"
         )

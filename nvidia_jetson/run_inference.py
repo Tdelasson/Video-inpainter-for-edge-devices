@@ -49,6 +49,12 @@ def parse_args() -> argparse.Namespace:
         help="Split specifiers like DAVIS:synthetic or YouTube-VOS:synthetic",
     )
     parser.add_argument(
+        "--frames-subdir",
+        type=str,
+        default="JPEGImages",
+        help="Frame folder under Test_Data/<dataset> (e.g. JPEGImages or JPEGImages_432_240)",
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         default=None,
@@ -172,7 +178,12 @@ def main() -> None:
     adapter, model_h, model_w = _build_adapter(args, device)
 
     for dataset_name, mask_type in eval_splits:
-        dataset = TestDataset("Test_Data", dataset_name, mask_type)
+        dataset = TestDataset(
+            "Test_Data",
+            dataset_name,
+            mask_type,
+            frames_subdir=args.frames_subdir,
+        )
         if args.limit is not None:
             dataset.video_names = dataset.video_names[: args.limit]
 
