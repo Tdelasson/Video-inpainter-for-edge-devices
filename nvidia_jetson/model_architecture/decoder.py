@@ -14,12 +14,12 @@ class Decoder (nn.Module):
         for i in range(num_layers):
             if i == num_layers - 1:
                 skip_channels = raw_channels
+                out_channels = base_channels
             else:
                 skip_channels = base_channels * (2 ** (num_layers - 2 - i))
+                out_channels = base_channels * (2 ** (num_layers - 2 - i))
 
             input_to_layer: int = current_channels + skip_channels
-
-            out_channels: int = base_channels
 
             layers.append(GatedDSC(
                 in_channels=input_to_layer,
