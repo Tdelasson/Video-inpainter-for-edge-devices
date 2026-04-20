@@ -1,9 +1,9 @@
 nvidia_jetson/Test_Data/DAVIS*
 nvidia_jetson/Test_Data/YouTube-VOS*
+nvidia_jetson/Results*
+nvidia_jetson/Masking/ultralytics-main*
 
 __pycache__/
-
-nvidia_jetson/Results*
 
 Baselines_Repos/*
 
