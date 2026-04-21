@@ -8,7 +8,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 from training_pipeline.config import *
 
 # Pipeline Imports
-from training_pipeline.dataset import YouTubeVOSDataset, IrregularMaskDataset
+from training_pipeline.dataset import *
 from model_architecture.video_inpainter import VideoInpainter
 from training_pipeline.mask_generator import (
     generate_random_square_mask,
@@ -36,7 +36,7 @@ def parse_args():
     parser.add_argument("--lr", type=float, default=0.0001)
 
     # Curriculum Parameters
-    parser.add_argument("--mask_type", type=str, choices=["random", "flying", "arbitrary", "youtube"], required=True)
+    parser.add_argument("--mask_type", type=str, choices=["random", "flying", "arbitrary", "human"], required=True)
     parser.add_argument("--use_memory", action="store_true", help="Enable persistent ConvGRU state")
 
     # Loss Weights
@@ -52,13 +52,6 @@ def parse_args():
 
 def train(args, model, flow_model, discriminator, train_loader, mask_dataset, optimizer_model, optimizer_disc, scheduler_model,
           scheduler_disc, criterion, adversarial_criterion, device, save_dir):
-    mask_generators = {
-        "random": generate_random_square_mask,
-        "flying": generate_flying_square_mask,
-        "arbitrary": generate_arbitrary_shape_mask,
-        "youtube": generate_video_object_mask
-    }
-    generate_mask = mask_generators[args.mask_type]
 
     metrics_history = {"total": [], "mask": [], "frame": [], "perc": [], "style": [], "temp": [], "adv": []}
 
@@ -66,22 +59,36 @@ def train(args, model, flow_model, discriminator, train_loader, mask_dataset, op
     print(f"Starting Phase: {args.phase_name} | Mask: {args.mask_type} | Memory: {args.use_memory}")
 
     while current_iter < args.iterations:
-        for video_data in train_loader:
+        for data in train_loader:
             if current_iter >= args.iterations: break
 
-            # Preprocessing
-            video_data = video_data.float().to(device) / 255.0
+            if args.mask_type == "human":
+                # Data is a dictionary from HumanInpaintingDataset
+                video_data = data["video"].float().to(device) / 255.0
+                masks = data["mask"].float().to(device)  # Masks are already 0.0-1.0
+            else:
+                # Data is a raw tensor from YouTubeVOSDataset
+                video_data = data.float().to(device) / 255.0
+
+            # Permute video to (B, T, C, H, W)
             video_data = video_data.permute(0, 1, 4, 2, 3)
             B, T, C, H, W = video_data.shape
 
+            # --- MASK GENERATION ---
+            if args.mask_type == "human":
+                # masks are already (B, T, 1, H, W) from the HumanMaskDataset
+                masked_video = video_data * (1.0 - masks)
+            else:
+                # Generate synthetic masks
+                if args.mask_type == "random":
+                    masked_video, masks = generate_random_square_mask(video_data)
+                elif args.mask_type == "flying":
+                    masked_video, masks = generate_flying_square_mask(video_data)
+                elif args.mask_type == "arbitrary":
+                    masked_video, masks = generate_arbitrary_shape_mask(video_data, mask_dataset)
+
             hidden_state = None
             prev_output = None
-
-            if args.mask_type in ["random", "flying"]:
-                masked_video, masks = generate_mask(video_data)
-            elif args.mask_type in ["arbitrary"]:
-                masked_video, masks = generate_arbitrary_shape_mask(video_data, mask_dataset)
-
             for t in range(0, T - args.seq_len + 1):
                 if current_iter >= args.iterations:
                     break
@@ -226,13 +233,31 @@ def main():
     adv_crit = torch.nn.BCEWithLogitsLoss()
 
     # Data
-    dataset = YouTubeVOSDataset(root_dir=os.path.join(os.getcwd(), "training_data", "train"))
-    loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=4, drop_last=True)
-    mask_dataset = IrregularMaskDataset(root_dir=os.path.join(os.getcwd(), "training_data", "irregular_mask", "disocclusion_img_mask"))
+    mask_dataset = None
+    if args.mask_type == "human":
+        print("Initializing Human-centric Inpainting Phase...")
+        clean_ds = YouTubeVOSDatasetWithoutHumans(root_dir=os.path.join(os.getcwd(), "training_data", "train"))
+        mask_ds = HumanMaskDataset(root_dir=os.path.join(os.getcwd(), "training_data", "train"))
+
+        # This pairs them together automatically
+        combined_dataset = HumanInpaintingDataset(clean_ds, mask_ds)
+        loader = DataLoader(combined_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4, drop_last=True)
+    else:
+        print(f"Initializing Synthetic Inpainting Phase: {args.mask_type}")
+        dataset = YouTubeVOSDataset(root_dir=os.path.join(os.getcwd(), "training_data", "train"))
+        loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=4, drop_last=True)
+
+        # Only load the irregular mask PNGs if we are in "arbitrary" mode
+        if args.mask_type == "arbitrary":
+            mask_dataset = IrregularMaskDataset(
+                root_dir=os.path.join(os.getcwd(), "training_data", "irregular_mask", "disocclusion_img_mask"))
 
     # Start Training
-    final_metrics = train(args, model, flow_model, discriminator, loader, mask_dataset,  opt_model, opt_disc, scheduler_model, scheduler_disc, criterion,
-          adv_crit, device, save_dir)
+    final_metrics = train(
+        args, model, flow_model, discriminator, loader, mask_dataset,
+        opt_model, opt_disc, scheduler_model, scheduler_disc,
+        criterion, adv_crit, device, save_dir
+    )
 
     log_data = {
         "hyperparameters": vars(args),

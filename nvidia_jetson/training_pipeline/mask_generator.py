@@ -2,6 +2,7 @@ from training_pipeline.config import *
 import torch
 import numpy as np
 from torch.utils.data import DataLoader
+from training_pipeline.dataset import *
 
 def generate_random_square_mask(video: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     B, T, C, H, W = video.shape
@@ -36,10 +37,10 @@ def generate_flying_square_mask(video: torch.Tensor) -> tuple[torch.Tensor, torc
     return masked_video, masks
 
 
-def generate_arbitrary_shape_mask(video, mask_dataset):
+def generate_arbitrary_shape_mask(video, mask_dataset: IrregularMaskDataset)-> tuple[torch.Tensor, torch.Tensor]:
     """
     video: torch.Tensor (B, T, C, H, W)
-    mask_dataset: IrregularMaskDataset (Hvor filer ligger i tidslig rækkefølge)
+    mask_dataset: IrregularMaskDataset
     """
     B, T, C, H, W = video.shape
     device = video.device
