@@ -54,7 +54,7 @@ class IrregularMaskDataset(Dataset):
         if not os.path.exists(self.mask_path):
             raise FileNotFoundError(f"Could not find the IrregularMasks folder: {self.mask_path}")
 
-        self.mask_list = [f for f in os.listdir(self.mask_path) if f.endswith('.png')]
+        self.mask_list = sorted([f for f in os.listdir(self.mask_path) if f.endswith('.png')])
         print(f"Mask dataset initialized: Found {len(self.mask_list)} masks")
 
     def __len__(self):

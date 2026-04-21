@@ -38,32 +38,32 @@ def generate_flying_square_mask(video: torch.Tensor) -> tuple[torch.Tensor, torc
 
 def generate_arbitrary_shape_mask(video, mask_dataset):
     """
-    video: torch.Tensor of shape (B, T, C, H, W)
-    mask_dataset: The IrregularMaskDataset instance
+    video: torch.Tensor (B, T, C, H, W)
+    mask_dataset: IrregularMaskDataset (Hvor filer ligger i tidslig rækkefølge)
     """
     B, T, C, H, W = video.shape
     device = video.device
-
     all_masks = []
 
-    # We need T masks for every video in the batch
     for b in range(B):
+        max_start_idx = len(mask_dataset) - T
+
+        if max_start_idx <= 0:
+            start_idx = 0
+        else:
+            start_idx = np.random.randint(0, max_start_idx)
+
         video_masks = []
         for t in range(T):
-            # Pick a random index from the mask dataset
-            rand_idx = np.random.randint(0, len(mask_dataset))
-            mask = mask_dataset[rand_idx]  # This calls __getitem__
+            mask = mask_dataset[start_idx + t]
             video_masks.append(mask)
 
-        # Stack frames for one video: (T, 1, H, W)
         all_masks.append(torch.stack(video_masks))
 
     masks = torch.stack(all_masks).to(device)
 
     masked_video = video * (1.0 - masks)
-
     return masked_video, masks
-
 
 def generate_video_object_mask(video: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     pass
