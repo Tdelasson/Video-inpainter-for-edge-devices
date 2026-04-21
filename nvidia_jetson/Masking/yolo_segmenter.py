@@ -41,6 +41,7 @@ class YOLOSegmenter:
         imgsz: int = 640,
         device: str | None = None,
         target_classes: list[int] | None = None,
+        mask_threshold: float = 0.5,
     ):
         if model_path is not None:
             weights = Path(model_path)
@@ -63,6 +64,7 @@ class YOLOSegmenter:
         self.imgsz = imgsz
         self.device = device
         self.target_classes = target_classes  # None = all classes
+        self.mask_threshold = mask_threshold
 
     def segment(
         self,
@@ -90,6 +92,7 @@ class YOLOSegmenter:
             imgsz=self.imgsz,
             device=self.device,
             classes=self.target_classes,
+            retina_masks=True,
             verbose=False,
         )
 
@@ -98,15 +101,13 @@ class YOLOSegmenter:
         # Build a combined binary mask from all detected instances
         mask = np.zeros((h, w), dtype=np.uint8)
 
-        if result.masks is not None:
-            for seg_mask in result.masks.data:
-                # Each mask is a (model_h, model_w) tensor with values in [0, 1]
-                m = seg_mask.cpu().numpy()
-                m = (m > 0.5).astype(np.uint8) * 255
-                # Resize to original frame dimensions if needed
-                if m.shape[:2] != (h, w):
-                    m = cv2.resize(m, (w, h), interpolation=cv2.INTER_NEAREST)
-                mask = cv2.bitwise_or(mask, m)
+        if result.masks is not None and len(result.masks.data) > 0:
+            # Combine all instance masks in one vectorized pass.
+            m = result.masks.data.cpu().numpy()
+            m = (m > self.mask_threshold).any(axis=0).astype(np.uint8) * 255
+            if m.shape[:2] != (h, w):
+                m = cv2.resize(m, (w, h), interpolation=cv2.INTER_NEAREST)
+            mask = m
 
         if return_annotated:
             annotated = result.plot()  # BGR annotated image

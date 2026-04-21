@@ -27,7 +27,6 @@ from __future__ import annotations
 import argparse
 import queue
 import sys
-import threading
 import time
 
 import cv2
@@ -100,7 +99,11 @@ def segmentation_loop(
                 break
 
             # Run segmentation
-            mask, annotated = segmenter.segment(frame, return_annotated=True)
+            if display:
+                mask, annotated = segmenter.segment(frame, return_annotated=True)
+            else:
+                mask = segmenter.segment(frame, return_annotated=False)
+                annotated = None
 
             # Publish frame + mask for downstream inpainting
             payload = {"frame": frame, "mask": mask}
@@ -177,6 +180,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--iou", type=float, default=0.45, help="IoU threshold for NMS")
     parser.add_argument("--imgsz", type=int, default=640, help="YOLO input image size")
     parser.add_argument(
+        "--mask-threshold",
+        type=float,
+        default=0.5,
+        help="Threshold used to binarize instance masks (default: 0.5)",
+    )
+    parser.add_argument(
         "--device",
         type=str,
         default=None,
@@ -210,6 +219,7 @@ def main() -> None:
         imgsz=args.imgsz,
         device=args.device,
         target_classes=args.classes,
+        mask_threshold=args.mask_threshold,
     )
     print(f"Model loaded from: {segmenter.model_source}")
 
