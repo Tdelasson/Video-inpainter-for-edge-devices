@@ -51,16 +51,6 @@ def gstreamer_pipeline_in(sensor_id: int = 0, w: int = WIDTH, h: int = HEIGHT, f
     )
 
 
-def opencv_has_gstreamer() -> bool:
-    """Return True if current cv2 build has GStreamer enabled."""
-    try:
-        build_info = cv2.getBuildInformation()
-    except Exception:
-        return False
-
-    return "GStreamer:                   YES" in build_info or "GStreamer: YES" in build_info
-
-
 # ── Shared output queue for downstream inpainting ────────────────────────────
 # Each item is a dict: {"frame": np.ndarray (BGR), "mask": np.ndarray (H,W)}
 inpaint_queue: queue.Queue[dict[str, np.ndarray]] = queue.Queue(maxsize=2)
@@ -69,11 +59,6 @@ inpaint_queue: queue.Queue[dict[str, np.ndarray]] = queue.Queue(maxsize=2)
 def open_camera(source: str | int, width: int, height: int, fps: int) -> cv2.VideoCapture:
     """Open a camera source – CSI via GStreamer, USB index, or video file."""
     if source == "csi":
-        if not opencv_has_gstreamer():
-            raise RuntimeError(
-                "OpenCV in this environment does not have GStreamer support. "
-                "This commonly happens after installing pip opencv on Jetson."
-            )
         pipeline = gstreamer_pipeline_in(sensor_id=0, w=width, h=height, fps=fps)
         cap = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
     elif source.isdigit():
@@ -184,12 +169,6 @@ def parse_args() -> argparse.Namespace:
         help="Camera source: 'csi' for Jetson CSI, integer for USB cam index, "
              "or a path to a video file (default: csi)",
     )
-    parser.add_argument(
-        "--sensor-id",
-        type=int,
-        default=0,
-        help="CSI sensor id for source=csi (default: 0)",
-    )
     parser.add_argument("--width", type=int, default=WIDTH, help="Capture width")
     parser.add_argument("--height", type=int, default=HEIGHT, help="Capture height")
     parser.add_argument("--fps", type=int, default=FPS, help="Capture FPS")
@@ -240,33 +219,9 @@ def main() -> None:
     )
     print(f"Model loaded from: {segmenter.model_source}")
 
-    if args.source == "csi" and args.sensor_id != 0:
-        def _open_csi_with_sensor_id() -> cv2.VideoCapture:
-            if not opencv_has_gstreamer():
-                raise RuntimeError(
-                    "OpenCV in this environment does not have GStreamer support. "
-                    "This commonly happens after installing pip opencv on Jetson."
-                )
-            pipeline = gstreamer_pipeline_in(
-                sensor_id=args.sensor_id,
-                w=args.width,
-                h=args.height,
-                fps=args.fps,
-            )
-            return cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
-
-        cap = _open_csi_with_sensor_id()
-    else:
-        cap = open_camera(args.source, args.width, args.height, args.fps)
-
+    cap = open_camera(args.source, args.width, args.height, args.fps)
     if not cap.isOpened():
         print("Error: could not open camera / video source.")
-        if args.source == "csi":
-            print("Hint: CSI requires GStreamer-enabled OpenCV on Jetson.")
-            print("Hint: Check with: python -c \"import cv2; print('GStreamer' in cv2.getBuildInformation())\"")
-            print("Hint: If False, remove pip OpenCV and use Jetson OpenCV build.")
-            print("Hint: Try --sensor-id 1 if camera is on the second CSI sensor.")
-            print("Hint: Temporary test path: --source 0 (USB webcam).")
         sys.exit(1)
 
     print(f"Source: {args.source}  Resolution: {args.width}x{args.height}  FPS: {args.fps}")
