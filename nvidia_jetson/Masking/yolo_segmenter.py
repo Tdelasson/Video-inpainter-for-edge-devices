@@ -35,37 +35,28 @@ class YOLOSegmenter:
     def __init__(
         self,
         model_name: str = "yolo26n-seg",
-        model_path: str | Path | None = None,
         conf: float = 0.35,
         iou: float = 0.45,
         imgsz: int = 640,
         device: str | None = None,
         target_classes: list[int] | None = None,
-        mask_threshold: float = 0.5,
     ):
-        if model_path is not None:
-            weights = Path(model_path)
-        else:
-            if model_name not in AVAILABLE_MODELS:
-                raise ValueError(
-                    f"Unknown model '{model_name}'. "
-                    f"Available: {list(AVAILABLE_MODELS.keys())}. "
-                    "Or provide model_path=..."
-                )
-            weights = AVAILABLE_MODELS[model_name]
+        if model_name not in AVAILABLE_MODELS:
+            raise ValueError(
+                f"Unknown model '{model_name}'. "
+                f"Available: {list(AVAILABLE_MODELS.keys())}"
+            )
 
+        weights = AVAILABLE_MODELS[model_name]
         if not weights.exists():
             raise FileNotFoundError(f"Weight file not found: {weights}")
 
         self.model = YOLO(str(weights))
-        self.model_source = str(weights)
-        self.is_engine = weights.suffix.lower() == ".engine"
         self.conf = conf
         self.iou = iou
         self.imgsz = imgsz
         self.device = device
         self.target_classes = target_classes  # None = all classes
-        self.mask_threshold = mask_threshold
 
     def segment(
         self,
@@ -93,7 +84,6 @@ class YOLOSegmenter:
             imgsz=self.imgsz,
             device=self.device,
             classes=self.target_classes,
-            retina_masks=True,
             verbose=False,
         )
 
@@ -106,7 +96,7 @@ class YOLOSegmenter:
             for seg_mask in result.masks.data:
                 # Each mask is a (model_h, model_w) tensor with values in [0, 1]
                 m = seg_mask.cpu().numpy()
-                m = (m > self.mask_threshold).astype(np.uint8) * 255
+                m = (m > 0.5).astype(np.uint8) * 255
                 # Resize to original frame dimensions if needed
                 if m.shape[:2] != (h, w):
                     m = cv2.resize(m, (w, h), interpolation=cv2.INTER_NEAREST)
