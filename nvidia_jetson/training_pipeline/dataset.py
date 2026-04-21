@@ -3,6 +3,7 @@ import cv2
 from torch.utils.data import Dataset
 import numpy as np
 from  training_pipeline.config import *
+import torch
 
 
 class YouTubeVOSDataset(Dataset):
@@ -44,3 +45,30 @@ class YouTubeVOSDataset(Dataset):
             return self.__getitem__(np.random.randint(0, len(self.video_list)))
 
         return np.array(rgb_frames)  # (T, H, W, C) where T is dynamic
+
+class IrregularMaskDataset(Dataset):
+    def __init__(self, root_dir):
+        self.mask_path = root_dir
+        self.target_res = TARGET_RES
+
+        if not os.path.exists(self.mask_path):
+            raise FileNotFoundError(f"Could not find the IrregularMasks folder: {self.mask_path}")
+
+        self.mask_list = [f for f in os.listdir(self.mask_path) if f.endswith('.png')]
+        print(f"Mask dataset initialized: Found {len(self.mask_list)} masks")
+
+    def __len__(self):
+        return len(self.mask_list)
+
+    def __getitem__(self, idx):
+        mask_name = self.mask_list[idx]
+        mask_path = os.path.join(self.mask_path, mask_name)
+        mask_img = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
+
+        if mask_img is None:
+            return self.__getitem__(0)
+
+        mask_img = cv2.resize(mask_img, self.target_res)
+        binary_mask = (mask_img < 127).astype(np.float32)
+
+        return torch.from_numpy(binary_mask).unsqueeze(0)

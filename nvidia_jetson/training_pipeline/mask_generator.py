@@ -1,6 +1,7 @@
 from training_pipeline.config import *
 import torch
 import numpy as np
+from torch.utils.data import DataLoader
 
 def generate_random_square_mask(video: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     B, T, C, H, W = video.shape
@@ -34,8 +35,35 @@ def generate_flying_square_mask(video: torch.Tensor) -> tuple[torch.Tensor, torc
     masked_video = video * (1.0 - masks)
     return masked_video, masks
 
-def generate_arbitrary_shape_mask(video: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-    pass
+
+def generate_arbitrary_shape_mask(video, mask_dataset):
+    """
+    video: torch.Tensor of shape (B, T, C, H, W)
+    mask_dataset: The IrregularMaskDataset instance
+    """
+    B, T, C, H, W = video.shape
+    device = video.device
+
+    all_masks = []
+
+    # We need T masks for every video in the batch
+    for b in range(B):
+        video_masks = []
+        for t in range(T):
+            # Pick a random index from the mask dataset
+            rand_idx = np.random.randint(0, len(mask_dataset))
+            mask = mask_dataset[rand_idx]  # This calls __getitem__
+            video_masks.append(mask)
+
+        # Stack frames for one video: (T, 1, H, W)
+        all_masks.append(torch.stack(video_masks))
+
+    masks = torch.stack(all_masks).to(device)
+
+    masked_video = video * (1.0 - masks)
+
+    return masked_video, masks
+
 
 def generate_video_object_mask(video: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     pass

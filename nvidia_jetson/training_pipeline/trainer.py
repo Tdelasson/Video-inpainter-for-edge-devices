@@ -8,7 +8,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 from training_pipeline.config import *
 
 # Pipeline Imports
-from training_pipeline.dataset import YouTubeVOSDataset
+from training_pipeline.dataset import YouTubeVOSDataset, IrregularMaskDataset
 from model_architecture.video_inpainter import VideoInpainter
 from training_pipeline.mask_generator import (
     generate_random_square_mask,
@@ -50,7 +50,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def train(args, model, flow_model, discriminator, train_loader, optimizer_model, optimizer_disc, scheduler_model,
+def train(args, model, flow_model, discriminator, train_loader, mask_dataset, optimizer_model, optimizer_disc, scheduler_model,
           scheduler_disc, criterion, adversarial_criterion, device, save_dir):
     mask_generators = {
         "random": generate_random_square_mask,
@@ -76,7 +76,11 @@ def train(args, model, flow_model, discriminator, train_loader, optimizer_model,
 
             hidden_state = None
             prev_output = None
-            masked_video, masks = generate_mask(video_data)
+
+            if args.mask_type in ["random", "flying"]:
+                masked_video, masks = generate_mask(video_data)
+            elif args.mask_type in ["arbitrary"]:
+                masked_video, masks = generate_arbitrary_shape_mask(video_data, mask_dataset)
 
             for t in range(0, T - args.seq_len + 1):
                 if current_iter >= args.iterations:
@@ -224,9 +228,10 @@ def main():
     # Data
     dataset = YouTubeVOSDataset(root_dir=os.path.join(os.getcwd(), "training_data", "train"))
     loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=4, drop_last=True)
+    mask_dataset = IrregularMaskDataset(root_dir=os.path.join(os.getcwd(), "training_data", "irregular_mask", "disocclusion_img_mask"))
 
     # Start Training
-    final_metrics = train(args, model, flow_model, discriminator, loader, opt_model, opt_disc, scheduler_model, scheduler_disc, criterion,
+    final_metrics = train(args, model, flow_model, discriminator, loader, mask_dataset,  opt_model, opt_disc, scheduler_model, scheduler_disc, criterion,
           adv_crit, device, save_dir)
 
     log_data = {
