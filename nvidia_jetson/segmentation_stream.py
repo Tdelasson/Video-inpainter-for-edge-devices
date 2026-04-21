@@ -27,7 +27,6 @@ from __future__ import annotations
 import argparse
 import queue
 import sys
-import threading
 import time
 
 import cv2
@@ -158,6 +157,12 @@ def parse_args() -> argparse.Namespace:
         help="Which YOLO segmentation model to use (default: yolo26n-seg)",
     )
     parser.add_argument(
+        "--model-path",
+        type=str,
+        default=None,
+        help="Optional explicit model path (.pt/.onnx/.engine). Overrides --model.",
+    )
+    parser.add_argument(
         "--source",
         type=str,
         default="csi",
@@ -170,6 +175,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--conf", type=float, default=0.35, help="Confidence threshold")
     parser.add_argument("--iou", type=float, default=0.45, help="IoU threshold for NMS")
     parser.add_argument("--imgsz", type=int, default=640, help="YOLO input image size")
+    parser.add_argument(
+        "--mask-threshold",
+        type=float,
+        default=0.5,
+        help="Threshold used to binarize instance masks (default: 0.5)",
+    )
     parser.add_argument(
         "--device",
         type=str,
@@ -198,13 +209,15 @@ def main() -> None:
     print(f"Loading {args.model} …")
     segmenter = YOLOSegmenter(
         model_name=args.model,
+        model_path=args.model_path,
         conf=args.conf,
         iou=args.iou,
         imgsz=args.imgsz,
         device=args.device,
         target_classes=args.classes,
+        mask_threshold=args.mask_threshold,
     )
-    print("Model loaded.")
+    print(f"Model loaded from: {segmenter.model_source}")
 
     cap = open_camera(args.source, args.width, args.height, args.fps)
     if not cap.isOpened():
