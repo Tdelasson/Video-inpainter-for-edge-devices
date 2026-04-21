@@ -35,23 +35,29 @@ class YOLOSegmenter:
     def __init__(
         self,
         model_name: str = "yolo26n-seg",
+        model_path: str | Path | None = None,
         conf: float = 0.35,
         iou: float = 0.45,
         imgsz: int = 640,
         device: str | None = None,
         target_classes: list[int] | None = None,
     ):
-        if model_name not in AVAILABLE_MODELS:
-            raise ValueError(
-                f"Unknown model '{model_name}'. "
-                f"Available: {list(AVAILABLE_MODELS.keys())}"
-            )
+        if model_path is not None:
+            weights = Path(model_path)
+        else:
+            if model_name not in AVAILABLE_MODELS:
+                raise ValueError(
+                    f"Unknown model '{model_name}'. "
+                    f"Available: {list(AVAILABLE_MODELS.keys())}. "
+                    "Or provide model_path=..."
+                )
+            weights = AVAILABLE_MODELS[model_name]
 
-        weights = AVAILABLE_MODELS[model_name]
         if not weights.exists():
             raise FileNotFoundError(f"Weight file not found: {weights}")
 
         self.model = YOLO(str(weights))
+        self.model_source = str(weights)
         self.conf = conf
         self.iou = iou
         self.imgsz = imgsz
