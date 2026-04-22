@@ -116,7 +116,10 @@ def train(args, model, flow_model, discriminator, train_loader, mask_dataset, op
                 flow = None
                 if t > 0 and args.w_temp > 0:
                     with torch.no_grad():
-                        flow = flow_model(window[:, -2] * 255, window[:, -1] * 255)[-1]
+                        img1 = (window[:, -2] * 2.0) - 1.0
+                        img2 = (window[:, -1] * 2.0) - 1.0
+
+                        flow = flow_model(img1, img2)[-1]
 
                 # 2. Train Discriminator
                 optimizer_disc.zero_grad()
@@ -149,8 +152,6 @@ def train(args, model, flow_model, discriminator, train_loader, mask_dataset, op
                     discriminator=discriminator, fake_seq=fake_seq
                 )
                 total_loss.backward()
-
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
 
                 optimizer_model.step()
 
