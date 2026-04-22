@@ -14,7 +14,8 @@ from training_pipeline.mask_generator import (
     generate_random_square_mask,
     generate_flying_square_mask,
     generate_arbitrary_shape_mask,
-    generate_video_object_mask
+    generate_video_object_mask,
+    random_dilate_and_blur_mask
 )
 from training_pipeline.inpainting_loss import InpaintingLoss
 from torchvision.models.optical_flow import raft_small, Raft_Small_Weights
@@ -77,15 +78,19 @@ def train(args, model, flow_model, discriminator, train_loader, mask_dataset, op
             # --- MASK GENERATION ---
             if args.mask_type == "human":
                 # masks are already (B, T, 1, H, W) from the HumanMaskDataset
-                masked_video = video_data * (1.0 - masks)
+                pass
             else:
-                # Generate synthetic masks
+                # Generate synthetic masks (ignore the initially returned masked_video)
                 if args.mask_type == "random":
-                    masked_video, masks = generate_random_square_mask(video_data)
+                    masks = generate_random_square_mask(video_data)
                 elif args.mask_type == "flying":
-                    masked_video, masks = generate_flying_square_mask(video_data)
+                    masks = generate_flying_square_mask(video_data)
                 elif args.mask_type == "arbitrary":
-                    masked_video, masks = generate_arbitrary_shape_mask(video_data, mask_dataset)
+                    masks = generate_arbitrary_shape_mask(video_data, mask_dataset)
+
+            masks = random_dilate_and_blur_mask(masks)
+
+            masked_video = video_data * (1.0 - masks)
 
             hidden_state = None
             prev_output = None
