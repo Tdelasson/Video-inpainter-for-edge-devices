@@ -8,9 +8,10 @@ from components.theme import Theme
 class App(ctk.CTk):
     def __init__(self):
          super().__init__()
-         self.title("Hello World")
+         self.title("VIPER")
          self.after(0, lambda: self.state("zoomed"))         
          
+         #Header-Content-Footer
          self.grid_rowconfigure(0, weight = 0)
          self.grid_rowconfigure(1, weight = 1)
          self.grid_rowconfigure(2, weight = 0)
@@ -27,31 +28,29 @@ class App(ctk.CTk):
          self.footer = ctk.CTkFrame(self, height=110, fg_color=Theme.BLUE, corner_radius=0)
          self.footer.grid(row=2, column=0, sticky="ew")
 
-         #Initialize frames
-         self.frames = {}
+         #Initialize pages
+         self.pages = {}
 
          for F in (MainPage_zmq, GuidePage, AboutUs):
              page_name = F.__name__
-             frame = F(parent=container, controller=self)
-             self.frames[page_name] = frame
-             frame.grid(row=0, column=0, sticky="nsew")
+             page = F(parent=container, controller=self)
+             self.pages[page_name] = page
+             page.grid(row=0, column=0, sticky="nsew")
          
-         self.show_frame("MainPage_zmq")
+         self.show_page("MainPage_zmq")
 
-         #Run this code when clicking X to close app
-        #  self.protocol("WM_DELETE_WINDOW", self.on_closing)
-    
-    def show_frame(self, page_name):
-        frame = self.frames[page_name]
-        frame.tkraise()
+    def show_page(self, page_name):
+        page = self.pages[page_name]
+        page.grid(row=0, column=0, sticky="nsew")
+        page.tkraise()
 
+        #Hide other pages than the current one
+        for name, f in self.pages.items():
+            if name != page_name:
+                f.grid_remove()
+        
         self.update_idletasks()
         self.header.select_button(page_name)
-    
-    # def on_closing(self):
-    #     if "MainPage" in self.frames:
-    #         self.frames["MainPage"].cap.release()
-    #         self.destroy()
     
 if __name__ == "__main__":
     app = App()

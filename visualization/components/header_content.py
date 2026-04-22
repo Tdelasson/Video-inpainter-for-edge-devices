@@ -25,8 +25,8 @@ class Header(ctk.CTkFrame):
         self.grid_columnconfigure(2, weight = 1)
 
         #Title label
-        self.label = ctk.CTkLabel(self, text="                                         modelName", font=(Theme.FONT_T,48), text_color=Theme.WHITE)
-        self.label.grid(row=0, column=1, padx=(70,10), pady=20)
+        self.label = ctk.CTkLabel(self, text="VIPER", font=(Theme.FONT_T,48), text_color=Theme.WHITE)
+        self.label.grid(row=0, column=1, padx=(130,20), pady=20)
 
         #Buttons
         self.btn_group = ctk.CTkFrame(self, fg_color=Theme.TP)
@@ -44,7 +44,7 @@ class Header(ctk.CTkFrame):
         self.select_button("Main Page_zmq")
 
     def nav_to(self, page_name, controller):
-        controller.show_frame(page_name)
+        controller.show_page(page_name)
         self.select_button(page_name)
     
     def select_button(self, active_page_name):
