@@ -1,6 +1,7 @@
 nvidia_jetson/Test_Data/DAVIS*
 nvidia_jetson/Test_Data/YouTube-VOS*
 nvidia_jetson/Results*
+nvidia_jetson/JetsonResults*
 nvidia_jetson/Masking/ultralytics-main*
 nvidia_jetson/Masking/yolo26*
 /venv
