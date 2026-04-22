@@ -185,7 +185,7 @@ def train(args, model, flow_model, discriminator, train_loader, mask_dataset, op
             if current_iter >= args.iterations:
                 break
 
-        return {k: np.mean(v) for k, v in metrics_history.items()}
+    return {k: np.mean(v) for k, v in metrics_history.items()}
 
 def save_previews(save_dir, it, comp, tgt, m_win):
     out_img = (comp[0].detach().cpu().permute(1, 2, 0).numpy() * 255).astype(np.uint8)
