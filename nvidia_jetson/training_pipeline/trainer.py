@@ -121,11 +121,12 @@ def train(args, model, flow_model, discriminator, train_loader, mask_dataset, op
                     hidden_state = hidden_state.detach()
 
                 fake_frame = output * target_mask + target * (1 - target_mask)
-                fake_seq = torch.stack([window[:, -3], window[:, -2], fake_frame], dim=2)
+                seq_frames = [window[:, i] for i in range(window.shape[1] - 1)] + [fake_frame]
+                fake_seq = torch.stack(seq_frames, dim=2)
 
                 if args.w_adv > 0:
-                    # Real pass
-                    real_seq = window[:, -3:].permute(0, 2, 1, 3, 4)
+                    # Match the shape for the real pass
+                    real_seq = window.permute(0, 2, 1, 3, 4)
                     d_real_loss = adversarial_criterion(discriminator(real_seq),
                                                         torch.ones_like(discriminator(real_seq)))
                     # Fake pass (detach to avoid updating model)
