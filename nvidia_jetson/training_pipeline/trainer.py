@@ -161,7 +161,7 @@ def train(args, model, flow_model, discriminator, train_loader, mask_dataset, op
                 # Prep for next window
                 with torch.no_grad():
                     composited = output * target_mask + target * (1 - target_mask)
-                    prev_output = composited
+                    prev_output = target
 
                 # Logging & Saving
                 if current_iter % 10 == 0:

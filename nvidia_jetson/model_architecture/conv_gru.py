@@ -18,7 +18,11 @@ class ConvolutionalGatedRecurrentUnits(nn.Module):
 
     def forward(self, x: torch.Tensor, h_prev: torch.Tensor= None) -> torch.Tensor:
         if h_prev is None:
-            h_prev = torch.zeros(x.size(0), self.hidden_dim, x.size(2), x.size(3)).to(x.device)
+            h_prev = torch.full(
+                (x.size(0), self.hidden_dim, x.size(2), x.size(3)),
+                0.1,  # small positive bias
+                device=x.device
+            )
 
         combined_zr_conv: torch.Tensor = self.conv_zr(torch.cat([x, h_prev], dim=1))
         z, r = torch.split(combined_zr_conv, combined_zr_conv.shape[1] // 2, dim=1)

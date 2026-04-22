@@ -64,8 +64,9 @@ class InpaintingLoss(torch.nn.Module):
         # Warped Temporal Loss
         temp_loss = torch.tensor(0.0, device=output.device)
         if prev_output is not None and flow is not None:
-            warped_prev = warp(prev_output.detach(), flow)
-            temp_loss = self.l1(output, warped_prev) * self.temporal_w
+            warped_prev = warp(prev_output, flow)
+            unmasked = (1 - mask)
+            temp_loss = self.l1(output * unmasked, warped_prev * unmasked) * self.temporal_w
 
         # Adversarial Loss
         adv_loss = torch.tensor(0.0, device=output.device)
