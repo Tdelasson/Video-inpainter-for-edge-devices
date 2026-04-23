@@ -306,9 +306,9 @@ def save_previews(save_dir, it, comp, tgt, m_win):
     target_img = (tgt[0].detach().cpu().permute(1, 2, 0).numpy() * 255).astype(np.uint8)
     input_img = (m_win[0, -1].detach().cpu().permute(1, 2, 0).numpy() * 255).astype(np.uint8)
 
-    cv2.imwrite(os.path.join(save_dir, f"iter_{it}_output.png"), cv2.cvtColor(out_img, cv2.COLOR_RGB2BGR))
-    cv2.imwrite(os.path.join(save_dir, f"iter_{it}_target.png"), cv2.cvtColor(target_img, cv2.COLOR_RGB2BGR))
-    cv2.imwrite(os.path.join(save_dir, f"iter_{it}_input.png"), cv2.cvtColor(input_img, cv2.COLOR_RGB2BGR))
+    cv2.imwrite(os.path.join(save_dir, "image_results", f"iter_{it}_output.png"), cv2.cvtColor(out_img, cv2.COLOR_RGB2BGR))
+    cv2.imwrite(os.path.join(save_dir, "image_results", f"iter_{it}_target.png"), cv2.cvtColor(target_img, cv2.COLOR_RGB2BGR))
+    cv2.imwrite(os.path.join(save_dir, "image_results", f"iter_{it}_input.png"), cv2.cvtColor(input_img, cv2.COLOR_RGB2BGR))
 
 
 def main():
@@ -319,6 +319,7 @@ def main():
     master_folder = args.model_name if args.model_name else f"Model_BC{BASE_CHANNELS}_L{NUM_LAYERS}"
     save_dir = os.path.join("results", master_folder, args.phase_name)
     os.makedirs(save_dir, exist_ok=True)
+    os.makedirs(os.path.join(save_dir, "image_results"), exist_ok=True)
 
     print(f"Saving this phase to: {save_dir}")
 
