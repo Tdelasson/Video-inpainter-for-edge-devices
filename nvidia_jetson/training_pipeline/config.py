@@ -6,6 +6,7 @@ NUM_LAYERS = 3
 # Training hyperparameters
 BATCH_SIZE = 1
 LEARNING_RATE = 0.001
+EARLY_STOP_PATIENCE = 4
 
 # Mask hyperparameters
 MASK_PIXEL_MOVEMENT_SPEED = 5

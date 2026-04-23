@@ -50,11 +50,84 @@ def parse_args():
 
     return parser.parse_args()
 
+def validate(args, model, flow_model, val_loader, val_mask_dataset, criterion, device, save_dir, current_iter):
+    model.eval()
+    metrics = {"total": [], "mask": [], "frame": [], "psnr": [], "temporal_consistency": []}
 
-def train(args, model, flow_model, discriminator, train_loader, mask_dataset, optimizer_model, optimizer_disc, scheduler_model,
+    with torch.no_grad():
+        for i, data in enumerate(val_loader):
+            if i >= 100:
+                break
+
+            video_data = data.float().to(device) / 255.0
+            video_data = video_data.permute(0, 1, 4, 2, 3)
+            B, T, C, H, W = video_data.shape
+
+            # Always uses arbitrary - This gives a consistent benchmark across all phases
+            masks = generate_arbitrary_shape_mask(video_data, val_mask_dataset)
+            masks = random_dilate_and_blur_mask(masks)
+            masked_video = video_data * (1.0 - masks)
+
+            hidden_state = None
+            prev_composited = None
+
+            for t in range(0, T - args.seq_len + 1):
+                window = video_data[:, t:t + args.seq_len]
+                masked_window = masked_video[:, t:t + args.seq_len]
+                masks_window = masks[:, t:t + args.seq_len]
+
+                target = window[:, -1]
+                target_mask = masks_window[:, -1]
+
+                pixel_input = masked_window.reshape(B, args.seq_len * C, H, W)
+                mask_input = masks_window.reshape(B, args.seq_len, H, W)
+                full_input = torch.cat([pixel_input, mask_input], dim=1)
+
+                output, hidden_state = model(full_input, hidden_state)
+                if hidden_state is not None:
+                    hidden_state = hidden_state.detach()
+
+                composited = output * target_mask + target * (1 - target_mask)
+
+                # Losses — no discriminator during validation
+                total_loss, l1_m, l1_f, _, _, _, _ = criterion(
+                    output=output, target=target, mask=target_mask,
+                    prev_output=None, flow=None,
+                    discriminator=None, fake_seq=None
+                )
+
+                # PSNR on masked region only
+                mse = torch.mean((output * target_mask - target * target_mask) ** 2)
+                psnr = 10 * torch.log10(1.0 / (mse + 1e-8))
+
+                # Temporal consistency — how much does the output change between frames
+                # A flickering model will score poorly here
+                if prev_composited is not None:
+                    temp_consistency = torch.mean(
+                        torch.abs(composited - prev_composited)
+                    ).item()
+                    metrics["temporal_consistency"].append(temp_consistency)
+
+                metrics["total"].append(total_loss.item())
+                metrics["mask"].append(l1_m.item())
+                metrics["frame"].append(l1_f.item())
+                metrics["psnr"].append(psnr.item())
+
+                prev_composited = composited
+
+    # Save one validation preview so you can visually inspect
+    save_previews(save_dir, f"val_{current_iter}", composited, target, masked_window)
+
+    model.train()
+    return {k: np.mean(v) for k, v in metrics.items() if len(v) > 0}
+
+
+def train(args, model, flow_model, discriminator, train_loader, val_loader, mask_dataset, val_mask_dataset,optimizer_model, optimizer_disc, scheduler_model,
           scheduler_disc, criterion, adversarial_criterion, device, save_dir):
 
     metrics_history = {"total": [], "mask": [], "frame": [], "perc": [], "style": [], "temp": [], "adv": []}
+    best_val_loss = float("inf")
+    patience_counter = 0
 
     current_iter = 0
     print(f"Starting Phase: {args.phase_name} | Mask: {args.mask_type} | Memory: {args.use_memory}")
@@ -121,7 +194,7 @@ def train(args, model, flow_model, discriminator, train_loader, mask_dataset, op
 
                         flow = flow_model(img1, img2)[-1]
 
-                # 2. Train Discriminator
+                # Train Discriminator
                 optimizer_disc.zero_grad()
                 output, hidden_state = model(full_input, hidden_state)
 
@@ -144,7 +217,7 @@ def train(args, model, flow_model, discriminator, train_loader, mask_dataset, op
                     d_loss.backward()
                     optimizer_disc.step()
 
-                # 3. Train Model
+                # Train Model
                 optimizer_model.zero_grad()
                 total_loss, l1_m, l1_f, perc_v, style_v, temp_v, adv = criterion(
                     output=output, target=target, mask=target_mask,
@@ -190,6 +263,38 @@ def train(args, model, flow_model, discriminator, train_loader, mask_dataset, op
                     save_previews(save_dir, current_iter, composited, target, masked_window)
 
                 current_iter += 1
+
+                if current_iter % 5000 == 0:
+                    val_metrics = validate(
+                        args, model, flow_model, val_loader,
+                        val_mask_dataset, criterion, device, save_dir, current_iter
+                    )
+
+                    print(
+                        f"[VAL] Iter {current_iter} | "
+                        f"Total: {val_metrics['total']:.4f} | "
+                        f"Mask L1: {val_metrics['mask']:.4f} | "
+                        f"PSNR: {val_metrics['psnr']:.2f}dB | "
+                        f"Temp Consistency: {val_metrics.get('temporal_consistency', 0):.4f}"
+                    )
+
+                    # Save best model
+                    if val_metrics["total"] < best_val_loss:
+                        best_val_loss = val_metrics["total"]
+                        patience_counter = 0
+                        torch.save(model.state_dict(),
+                                   os.path.join(save_dir, "best_model.pth"))
+                        print(f"Model saved")
+                    else:
+                        patience_counter += 1
+                        print(f"No improvement ({patience_counter}/{EARLY_STOP_PATIENCE})")
+                        if patience_counter >= EARLY_STOP_PATIENCE:
+                            print(f"Early stopping triggered at iter {current_iter}")
+                            return {k: np.mean(v) for k, v in metrics_history.items()}
+
+                    # Log to file
+                    with open(os.path.join(save_dir, "val_log.jsonl"), "a") as f:
+                        f.write(json.dumps({"iter": current_iter, **val_metrics}) + "\n")
 
             if current_iter >= args.iterations:
                 break
@@ -262,11 +367,17 @@ def main():
             mask_dataset = IrregularMaskDataset(
                 root_dir=os.path.join(os.getcwd(), "training_data", "irregular_mask", "disocclusion_img_mask"))
 
+    val_dataset = YouTubeVOSDataset(root_dir=os.path.join(os.getcwd(), "training_data", "valid"))
+    val_loader = DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=2, drop_last=True)
+    val_mask_dataset = IrregularMaskDataset(
+        root_dir=os.path.join(os.getcwd(), "training_data", "irregular_mask", "disocclusion_img_mask")
+    )
+
     # Start Training
     final_metrics = train(
-        args, model, flow_model, discriminator, loader, mask_dataset,
-        opt_model, opt_disc, scheduler_model, scheduler_disc,
-        criterion, adv_crit, device, save_dir
+        args, model, flow_model, discriminator, loader, val_loader,
+        mask_dataset, val_mask_dataset, opt_model, opt_disc,
+        scheduler_model, scheduler_disc, criterion, adv_crit, device, save_dir
     )
 
     log_data = {
