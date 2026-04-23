@@ -5,6 +5,7 @@ import zmq
 import numpy as np
 import queue
 import threading
+import json
 
 
 from components.header_content import Header
@@ -16,6 +17,7 @@ from collections import deque
 JETSON_IP = "192.168.137.108"
 DIRECT_PORT = 5000
 AI_PORT = 5001
+STATS_PORT = 5002
 
 class MainPage_zmq(ctk.CTkFrame):
     def __init__(self, parent, controller):
@@ -25,11 +27,13 @@ class MainPage_zmq(ctk.CTkFrame):
         #Queue setup
         self.frame_queue_l = queue.Queue(maxsize=1)
         self.frame_queue_r = queue.Queue(maxsize=1)
+        self.stats_queue = queue.Queue(maxsize=1)
 
         #Zmq sockets setup
         self.context = zmq.Context()
         self.sub_direct = self.setup_socket(DIRECT_PORT)
         self.sub_ai = self.setup_socket(AI_PORT)
+        self.sub_stats = self.setup_socket(STATS_PORT)
 
         self.grid_columnconfigure((0, 1), weight=1)
 
@@ -60,9 +64,10 @@ class MainPage_zmq(ctk.CTkFrame):
         self.desc_right.grid(row=5, column=1, padx=10, pady=(2,10), sticky="w")
 
         stats_text = (
-            f"Resolution: X\n"
-            f"FPS: X\n"
-            f"Latency: X\n"
+            "Resolution: --\n"
+            "FPS: --\n"
+            "Latency: --\n"
+            "Memory: --\n"
         )
 
         self.desc_left.configure(text=stats_text)
@@ -98,6 +103,16 @@ class MainPage_zmq(ctk.CTkFrame):
                         try: self.frame_queue_r.get_nowait()
                         except: pass
                     self.frame_queue_r.put(img_r)
+
+                try:
+                    stats_msg = self.sub_stats.recv(flags=zmq.NOBLOCK)
+                    stats = json.loads(stats_msg.decode("utf-8"))
+                    if not self.stats_queue.empty():
+                        try: self.stats_queue.get_nowait()
+                        except: pass
+                    self.stats_queue.put(stats)
+                except zmq.error.Again:
+                    pass
             except zmq.error.Again:
                 continue
             except Exception as e:
@@ -131,6 +146,25 @@ class MainPage_zmq(ctk.CTkFrame):
                 self.display_right.configure(text="")
             # img_l = self.process_image(frame_direct)
             self.display_right.configure(image=img_r)
+        except queue.Empty:
+            pass
+
+        try:
+            stats = self.stats_queue.get_nowait()
+            mem_val = stats.get("memory_mb", -1)
+            if isinstance(mem_val, (int, float)) and mem_val >= 0:
+                mem_text = f"{mem_val:.2f} MB"
+            else:
+                mem_text = "N/A"
+
+            stats_text = (
+                f"Resolution: {stats.get('resolution', '--')}\n"
+                f"FPS: {stats.get('fps', '--')}\n"
+                f"Latency: {stats.get('latency_ms', '--')} ms\n"
+                f"Memory: {mem_text}\n"
+            )
+            self.desc_left.configure(text=stats_text)
+            self.desc_right.configure(text=stats_text)
         except queue.Empty:
             pass
 
