@@ -73,9 +73,22 @@ class MainPage_zmq(ctk.CTkFrame):
         self.desc_left.configure(text=stats_text)
         self.desc_right.configure(text=stats_text)
 
-        #Start background worker thread
-        self.video_thread = threading.Thread(target=self.video_worker, daemon=True)
-        self.video_thread.start()
+        # Start background worker threads independently so a slow AI stream
+        # does not hold back the live camera preview.
+        self.left_thread = threading.Thread(
+            target=self.frame_worker,
+            args=(self.sub_direct, self.frame_queue_l),
+            daemon=True,
+        )
+        self.right_thread = threading.Thread(
+            target=self.frame_worker,
+            args=(self.sub_ai, self.frame_queue_r),
+            daemon=True,
+        )
+        self.stats_thread = threading.Thread(target=self.stats_worker, daemon=True)
+        self.left_thread.start()
+        self.right_thread.start()
+        self.stats_thread.start()
 
         self.update_frame()
 
@@ -86,37 +99,36 @@ class MainPage_zmq(ctk.CTkFrame):
         socket.setsockopt(zmq.CONFLATE, 1)
         return socket
 
-    def video_worker(self):
+    def push_latest(self, target_queue, value):
+        if not target_queue.empty():
+            try:
+                target_queue.get_nowait()
+            except queue.Empty:
+                pass
+        target_queue.put(value)
+
+    def frame_worker(self, socket, target_queue):
         while self.running:
             try:
-                msg_l = self.sub_direct.recv()
-                img_l = self.process_image(msg_l)
-                if img_l:
-                    if not self.frame_queue_l.empty():
-                        try: self.frame_queue_l.get_nowait()
-                        except: pass
-                    self.frame_queue_l.put(img_l)
-                msg_r = self.sub_ai.recv()
-                img_r = self.process_image(msg_r)
-                if img_r:
-                    if not self.frame_queue_r.empty():
-                        try: self.frame_queue_r.get_nowait()
-                        except: pass
-                    self.frame_queue_r.put(img_r)
-
-                try:
-                    stats_msg = self.sub_stats.recv(flags=zmq.NOBLOCK)
-                    stats = json.loads(stats_msg.decode("utf-8"))
-                    if not self.stats_queue.empty():
-                        try: self.stats_queue.get_nowait()
-                        except: pass
-                    self.stats_queue.put(stats)
-                except zmq.error.Again:
-                    pass
+                msg = socket.recv()
+                img = self.process_image(msg)
+                if img:
+                    self.push_latest(target_queue, img)
             except zmq.error.Again:
                 continue
             except Exception as e:
                 print(f"Worker Error {e}")
+
+    def stats_worker(self):
+        while self.running:
+            try:
+                stats_msg = self.sub_stats.recv()
+                stats = json.loads(stats_msg.decode("utf-8"))
+                self.push_latest(self.stats_queue, stats)
+            except zmq.error.Again:
+                continue
+            except Exception as e:
+                print(f"Stats Worker Error {e}")
 
     def update_frame(self):
         if not self.winfo_ismapped():
