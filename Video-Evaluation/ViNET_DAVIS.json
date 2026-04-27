@@ -1,0 +1,12 @@
+{
+  "model": "ViNET",
+  "dataset": "DAVIS",
+  "mask_type": "synthetic_inverted",
+  "num_videos": 50,
+  "fp16": true,
+  "psnr": 28.4913,
+  "ssim": 0.9617,
+  "vfid": 0.9922,
+  "ewarp": 0.001585,
+  "ewarp_x1e2": 0.159
+}

@@ -3,3 +3,14 @@ nvidia_jetson/training_data/
 nvidia_jetson/pictures/
 nvidia_jetson/venv/
 nvidia_jetson/.idea/
+nvidia_jetson/Test_Data/DAVIS*
+nvidia_jetson/Test_Data/YouTube-VOS*
+
+__pycache__/
+
+nvidia_jetson/Results*
+
+Baselines_Repos/*
+
+/home/sw66/Projects/Video-inpainter-for-edge-devices/cusparselt-local-tegra-repo-ubuntu2204-0.7.0_1.0-1_arm64.deb
+pipeline_jetson_to_pc

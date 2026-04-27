@@ -1,0 +1,15 @@
+{
+  "dataset": "DAVIS",
+  "mask_type": "synthetic",
+  "num_videos": 5,
+  "fps": 7.924,
+  "latency_ms": 126.312,
+  "peak_memory_mb": 352.186,
+  "psnr": 30.5001,
+  "ssim": 0.9562,
+  "vfid": null,
+  "official_eval_error_vfid": "Official evaluator step failed: /home/sw66/Projects/Video-inpainter-for-edge-devices/venv/bin/python -m src.main.compute_vfid_features --gt_root=/tmp/official_eval_w3vv4sw0/gt_frames --output_path=/tmp/official_eval_w3vv4sw0/eval_feats/vfid.npy\nstdout:\n\nstderr:\nTraceback (most recent call last):\n  File \"/usr/lib/python3.10/runpy.py\", line 196, in _run_module_as_main\n    return _run_code(code, main_globals, None,\n  File \"/usr/lib/python3.10/runpy.py\", line 86, in _run_code\n    exec(code, run_globals)\n  File \"/home/sw66/Projects/Video-inpainter-for-edge-devices/Baselines_Repos/video-inpainting-evaluation-public/src/main/compute_vfid_features.py\", line 6, in <module>\n    from tqdm import tqdm\nModuleNotFoundError: No module named 'tqdm'\n",
+  "ewarp": null,
+  "ewarp_x1e2": null,
+  "official_eval_error_ewarp": "Official evaluator step failed: /home/sw66/Projects/Video-inpainter-for-edge-devices/venv/bin/python -m src.main.compute_flow_occlusion --gt_root=/tmp/official_eval_watbnfnh/gt_frames --output_root=/tmp/official_eval_watbnfnh/eval_feats\nstdout:\n\nstderr:\nTraceback (most recent call last):\n  File \"/usr/lib/python3.10/runpy.py\", line 196, in _run_module_as_main\n    return _run_code(code, main_globals, None,\n  File \"/usr/lib/python3.10/runpy.py\", line 86, in _run_code\n    exec(code, run_globals)\n  File \"/home/sw66/Projects/Video-inpainter-for-edge-devices/Baselines_Repos/video-inpainting-evaluation-public/src/main/compute_flow_occlusion.py\", line 13, in <module>\n    from ..models.flownet2.models import FlowNet2\n  File \"/home/sw66/Projects/Video-inpainter-for-edge-devices/Baselines_Repos/video-inpainting-evaluation-public/src/models/flownet2/models.py\", line 7, in <module>\n    from ...models.flownet2.networks.resample2d_package.resample2d import Resample2d\n  File \"/home/sw66/Projects/Video-inpainter-for-edge-devices/Baselines_Repos/video-inpainting-evaluation-public/src/models/flownet2/networks/resample2d_package/resample2d.py\", line 3, in <module>\n    import resample2d_cuda\nModuleNotFoundError: No module named 'resample2d_cuda'\n"
+}
