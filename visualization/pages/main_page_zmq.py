@@ -1,10 +1,10 @@
 import customtkinter as ctk
 import cv2
-#print(cv2.getBuildInformation())
 import zmq
 import numpy as np
 import queue
 import threading
+import json
 
 
 from components.header_content import Header
@@ -15,6 +15,7 @@ from PIL import Image
 JETSON_IP = "192.168.137.108"
 DIRECT_PORT = 5000
 AI_PORT = 5001
+STATS_PORT = 5002
 
 class MainPage_zmq(ctk.CTkFrame):
     def __init__(self, parent, controller):
@@ -24,11 +25,13 @@ class MainPage_zmq(ctk.CTkFrame):
         #Queue setup
         self.frame_queue_l = queue.Queue(maxsize=1)
         self.frame_queue_r = queue.Queue(maxsize=1)
+        self.stats_queue = queue.Queue(maxsize=1)
 
         #Zmq sockets setup
         self.context = zmq.Context()
         self.sub_direct = self.setup_socket(DIRECT_PORT)
         self.sub_ai = self.setup_socket(AI_PORT)
+        self.sub_stats = self.setup_socket(STATS_PORT)
 
         self.grid_columnconfigure((0, 1), weight=1)
 
@@ -44,19 +47,23 @@ class MainPage_zmq(ctk.CTkFrame):
         self.desc_left = self.left_side.desc
         self.desc_right = self.right_side.desc
 
-
-        stats_text = (
-            f"Resolution: X\n"
-            f"FPS: X\n"
-            f"Latency: X\n"
+        # Start background worker threads independently so a slow AI stream
+        # does not hold back the live camera preview.
+        self.left_thread = threading.Thread(
+            target=self.frame_worker,
+            args=(self.sub_direct, self.frame_queue_l),
+            daemon=True,
         )
+        self.right_thread = threading.Thread(
+            target=self.frame_worker,
+            args=(self.sub_ai, self.frame_queue_r),
+            daemon=True,
+        )
+        self.stats_thread = threading.Thread(target=self.stats_worker, daemon=True)
+        self.left_thread.start()
+        self.right_thread.start()
+        self.stats_thread.start()
 
-        self.desc_left.configure(text=stats_text)
-        self.desc_right.configure(text=stats_text)
-
-        #Start background worker thread
-        self.video_thread = threading.Thread(target=self.video_worker, daemon=True)
-        self.video_thread.start()
         self.update_frame()
 
     def setup_socket(self, port):
@@ -65,27 +72,37 @@ class MainPage_zmq(ctk.CTkFrame):
         socket.setsockopt(zmq.SUBSCRIBE, b"") #Let all message through
         socket.setsockopt(zmq.CONFLATE, 1) #Keep only the lastest message in the buffer
         return socket
-    
-    #Keep only newest frame from video
-    def video_worker(self):
+
+    def push_latest(self, target_queue, value):
+        if not target_queue.empty():
+            try:
+                target_queue.get_nowait()
+            except queue.Empty:
+                pass
+        target_queue.put(value)
+
+    def frame_worker(self, socket, target_queue):
         while self.running:
             try:
-                msg_l = self.sub_direct.recv()
-                img_l = self.process_image(msg_l)
-                if img_l:
-                    if not self.frame_queue_l.empty():
-                        try: self.frame_queue_l.get_nowait()
-                        except: pass
-                    self.frame_queue_l.put(img_l)
-                msg_r = self.sub_ai.recv()
-                img_r = self.process_image(msg_r)
-                if img_r:
-                    if not self.frame_queue_r.empty():
-                        try: self.frame_queue_r.get_nowait()
-                        except: pass
-                    self.frame_queue_r.put(img_r)
+                msg = socket.recv()
+                img = self.process_image(msg)
+                if img:
+                    self.push_latest(target_queue, img)
+            except zmq.error.Again:
+                continue
             except Exception as e:
                 print(f"Video Worker Error {e}")
+
+    def stats_worker(self):
+        while self.running:
+            try:
+                stats_msg = self.sub_stats.recv()
+                stats = json.loads(stats_msg.decode("utf-8"))
+                self.push_latest(self.stats_queue, stats)
+            except zmq.error.Again:
+                continue
+            except Exception as e:
+                print(f"Stats Worker Error {e}")
 
     def update_frame(self):
         if not self.winfo_ismapped():
@@ -105,6 +122,31 @@ class MainPage_zmq(ctk.CTkFrame):
             if self.display_right.cget("text") != "":
                 self.display_right.configure(text="")
             self.display_right.configure(image=img_r)
+        except queue.Empty:
+            pass
+
+        try:
+            stats = self.stats_queue.get_nowait()
+            mem_val = stats.get("memory_mb", -1)
+            if isinstance(mem_val, (int, float)) and mem_val >= 0:
+                mem_text = f"{mem_val:.2f} MB"
+            else:
+                mem_text = "N/A"
+
+            # Left panel: raw camera input stats
+            left_stats_text = (
+                f"Resolution: {stats.get('resolution', '--')}\n"
+                f"FPS: {stats.get('cam_fps', '--')}\n"
+            )
+            # Right panel: AI pipeline stats
+            right_stats_text = (
+                f"Resolution: {stats.get('resolution', '--')}\n"
+                f"FPS: {stats.get('fps', '--')}\n"
+                f"Latency: {stats.get('latency_ms', '--')} ms\n"
+                f"Memory: {mem_text}\n"
+            )
+            self.desc_left.configure(text=left_stats_text)
+            self.desc_right.configure(text=right_stats_text)
         except queue.Empty:
             pass
     

@@ -1,11 +1,13 @@
 nvidia_jetson/Test_Data/DAVIS*
 nvidia_jetson/Test_Data/YouTube-VOS*
-
+nvidia_jetson/Results*
+nvidia_jetson/JetsonResults*
+nvidia_jetson/Masking/ultralytics-main*
+nvidia_jetson/Masking/yolo26*
+/venv
 __pycache__/
 
-nvidia_jetson/Results*
-
 Baselines_Repos/*
-
+cusparselt-local-tegra-repo-ubuntu2204-0.7.0_1.0-1_arm64.deb*
 /home/sw66/Projects/Video-inpainter-for-edge-devices/cusparselt-local-tegra-repo-ubuntu2204-0.7.0_1.0-1_arm64.deb
 pipeline_jetson_to_pc
