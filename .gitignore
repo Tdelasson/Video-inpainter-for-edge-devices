@@ -1,0 +1,5 @@
+nvidia_jetson/results/
+nvidia_jetson/training_data/
+nvidia_jetson/pictures/
+nvidia_jetson/venv/
+nvidia_jetson/.idea/
