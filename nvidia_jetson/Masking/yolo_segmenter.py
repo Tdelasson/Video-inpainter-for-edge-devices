@@ -38,7 +38,7 @@ class YOLOSegmenter:
         model_path: str | Path | None = None,
         conf: float = 0.35,
         iou: float = 0.45,
-        imgsz: int = 640,
+        imgsz: int = 448,
         device: str | None = None,
         target_classes: list[int] | None = None,
         mask_threshold: float = 0.5,

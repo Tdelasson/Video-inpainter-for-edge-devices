@@ -22,8 +22,8 @@ from Masking.yolo_segmenter import YOLOSegmenter
 DIRECT_PORT = 5000
 AI_PORT = 5001
 STATS_PORT = 5002
-WIDTH = 1280
-HEIGHT = 720
+WIDTH = 448
+HEIGHT = 448
 FPS = 30
 SENSOR_ID = 0
 
@@ -147,7 +147,7 @@ ai_queue = queue.Queue(maxsize=1)
 cam_stats = {"fps": 0.0}   # updated by main loop, read by ai_thread for stats payload
 _cam_fps_counter = {"n": 0, "t0": time.time()}
 device = "cuda" if torch.cuda.is_available() else "cpu"
-segmenter = YOLOSegmenter(model_name=args.seg_model, model_path=args.seg_model_path)
+segmenter = YOLOSegmenter(model_name=args.seg_model, model_path=args.seg_model_path, target_classes=[0])
 inpainter, window_size = build_inpainter(args.inpaint_model, device)
 frame_buffer = deque(maxlen=max(1, window_size))
 mask_buffer = deque(maxlen=max(1, window_size))
