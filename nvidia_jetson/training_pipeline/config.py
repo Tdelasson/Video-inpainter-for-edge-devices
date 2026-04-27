@@ -1,7 +1,7 @@
 TARGET_RES = (256, 256)
 SEQ_LEN = 5
-BASE_CHANNELS = 64
-NUM_LAYERS = 3
+BASE_CHANNELS = 128
+NUM_LAYERS = 4
 
 # Training hyperparameters
 BATCH_SIZE = 1
