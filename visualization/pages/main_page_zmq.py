@@ -11,7 +11,6 @@ from components.header_content import Header
 from components.text import BodyText
 from components.theme import Theme
 from PIL import Image
-from collections import deque
 
 JETSON_IP = "192.168.137.108"
 DIRECT_PORT = 5000
@@ -33,31 +32,18 @@ class MainPage_zmq(ctk.CTkFrame):
 
         self.grid_columnconfigure((0, 1), weight=1)
 
-        #Left side
-        self.container_left = ctk.CTkFrame(self, fg_color=Theme.TP)
-        self.container_left.grid(row=2, column=0, padx = 80, pady=(90,0), sticky="ew")
-       
-        self.display_left = ctk.CTkLabel(self.container_left, text="Connecting to Jetson...", width=550, height=350)
-        self.display_left.grid(row=4, column=0, padx=10, pady=20)
 
-        self.title_left = BodyText(self.container_left, text="Input")
-        self.title_left.grid(row=2, column=0, padx=10, sticky="w")
+        self.left_side = VideoSection(self, title="Input")
+        self.left_side.grid(row=2, column=0, padx = 80, pady=(90,0), sticky="ew")
+        self.right_side = VideoSection(self, title="Output")
+        self.right_side.grid(row=2, column=1, padx = 80, pady=(90,0), sticky="ew")
 
-        self.desc_left = BodyText(self.container_left, text="")
-        self.desc_left.grid(row=5, column=0, padx=10, pady=(2,10), sticky="w")
 
-        #Right side
-        self.container_right = ctk.CTkFrame(self, fg_color=Theme.TP)
-        self.container_right.grid(row=2, column=1, padx = 80, pady=(90,0), sticky="ew")
-        
-        self.display_right = ctk.CTkLabel(self.container_right, text="Connecting to Jetson...", width=550, height=350)
-        self.display_right.grid(row=4, column=1, padx=10, pady=20)
+        self.display_left = self.left_side.display
+        self.display_right = self.right_side.display
+        self.desc_left = self.left_side.desc
+        self.desc_right = self.right_side.desc
 
-        self.title_right = BodyText(self.container_right, text="Output")
-        self.title_right.grid(row=2, column=1, padx=10, sticky="w")
-
-        self.desc_right = BodyText(self.container_right, text="")
-        self.desc_right.grid(row=5, column=1, padx=10, pady=(2,10), sticky="w")
 
         stats_text = (
             f"Resolution: X\n"
@@ -71,16 +57,16 @@ class MainPage_zmq(ctk.CTkFrame):
         #Start background worker thread
         self.video_thread = threading.Thread(target=self.video_worker, daemon=True)
         self.video_thread.start()
-
         self.update_frame()
 
     def setup_socket(self, port):
         socket = self.context.socket(zmq.SUB)
         socket.connect(f"tcp://{JETSON_IP}:{port}")
-        socket.setsockopt(zmq.SUBSCRIBE, b"")
-        socket.setsockopt(zmq.CONFLATE, 1)
+        socket.setsockopt(zmq.SUBSCRIBE, b"") #Let all message through
+        socket.setsockopt(zmq.CONFLATE, 1) #Keep only the lastest message in the buffer
         return socket
-
+    
+    #Keep only newest frame from video
     def video_worker(self):
         while self.running:
             try:
@@ -98,49 +84,31 @@ class MainPage_zmq(ctk.CTkFrame):
                         try: self.frame_queue_r.get_nowait()
                         except: pass
                     self.frame_queue_r.put(img_r)
-            except zmq.error.Again:
-                continue
             except Exception as e:
-                print(f"Worker Error {e}")
+                print(f"Video Worker Error {e}")
 
     def update_frame(self):
         if not self.winfo_ismapped():
             self.after(500, self.update_frame)
             return
-        
-        #time_start = time.time()
-        # ret_direct, frame_direct = self.get_frame_from_zmq(self.sub_direct) #Tries to read frame
-        # ret_ai, frame_ai = self.get_frame_from_zmq(self.sub_ai)
 
         try:
-        # if ret_direct:
             img_l = self.frame_queue_l.get_nowait()
             if self.display_left.cget("text") != "":
                 self.display_left.configure(text="")
-            # img_l = self.process_image(frame_direct)
             self.display_left.configure(image=img_l)
         except queue.Empty:
             pass
-        #else:
-        #    self.cap_direct.set(cv2.CAP_PROP_POS_FRAMES, 0) #Replay video when ending
 
         try:
-        # if ret_direct:
             img_r = self.frame_queue_r.get_nowait()
             if self.display_right.cget("text") != "":
                 self.display_right.configure(text="")
-            # img_l = self.process_image(frame_direct)
             self.display_right.configure(image=img_r)
         except queue.Empty:
             pass
-
-        # if ret_ai:
-        #     img_r = self.process_image(frame_ai)
-        #     self.display_right.configure(image=img_r)
-        # #else:
-        #    self.cap_ai.set(cv2.CAP_PROP_POS_FRAMES, 0) #Replay video when ending
     
-        self.after(1, self.update_frame)
+        self.after(15, self.update_frame)
 
     #Convert ZMQ data to a CTkImgae for display
     def process_image(self, message):
@@ -152,4 +120,19 @@ class MainPage_zmq(ctk.CTkFrame):
                 pil_img = Image.fromarray(cv2_img)
                 return ctk.CTkImage(light_image=pil_img, size=(550, 350)) #UI size
             return None
-            
+
+class VideoSection(ctk.CTkFrame):
+    def __init__(self, parent, title):
+        super().__init__(parent, fg_color=Theme.TP)
+
+        #Title
+        self.title_label = BodyText(self, text=title)
+        self.title_label.grid(row=0, column=0, padx=10, sticky="w")
+
+        #Display
+        self.display = ctk.CTkLabel(self, text="Connecting to Jetson...", width=550, height=350)
+        self.display.grid(row=1, column=0, padx=10, pady=20)
+        
+        #Describtion stats text
+        self.desc = BodyText(self, text="")
+        self.desc.grid(row=2, column=0, padx=10, pady=(2,10), sticky="w")

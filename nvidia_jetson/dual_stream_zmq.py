@@ -9,13 +9,13 @@ DIRECT_PORT = 5000
 AI_PORT = 5001
 WIDTH = 1280
 HEIGHT = 720
-FPS = 60
+FPS = 30
 
 
 #ZMQ setup
 context = zmq.Context()
 
-#direkte stream socket
+#Direct stream socket
 socket_direct = context.socket(zmq.PUB)
 socket_direct.setsockopt(zmq.SNDHWM, 1)
 socket_direct.bind(f"tcp://*:{DIRECT_PORT}")
@@ -36,32 +36,9 @@ def gstreamer_pipeline_in(sensor_id=0, w=WIDTH, h=HEIGHT, fps=FPS):
         f"videoconvert ! video/x-raw, format=BGR ! appsink"
     )
 
-
-#Takes the images and convert it to jpeg such that i can be sent via UDP to the PC host.
-#using jpegenc saves CPU
-# def gstreamer_pipeline_out(port):
-#     return (
-#         f"appsrc ! "
-#         f"video/x-raw, format=BGR, width={WIDTH}, height={HEIGHT}, framerate={FPS}/1 ! "
-#         f"videoconvert ! "
-#         f"video/x-raw, format=I420 !"
-#         f"jpegenc quality=80 ! "
-#         f"rtpjpegpay ! "
-#         f"udpsink host={PC_IP} port={port} sync=false"
-#     )    
-
-
-
 ai_queue = queue.Queue(maxsize=1)
 
-#out_ai = None
-
-
 def ai_thread():
-    #global out_ai
-
-    #out_ai = cv2.VideoWriter(gstreamer_pipeline_out(AI_PORT), cv2.CAP_GSTREAMER, 0, FPS, (WIDTH, HEIGHT), True)
-
     while True:
         frame = ai_queue.get()
 
@@ -79,10 +56,6 @@ def ai_thread():
 
 #Opens the camera using the GStream string.
 cap = cv2.VideoCapture(gstreamer_pipeline_in(sensor_id=0), cv2.CAP_GSTREAMER)
-
-#OpenCV uses GStreamer to "write" the video onto the network.
-#out_direct = cv2.VideoWriter(gstreamer_pipeline_out(DIRECT_PORT), cv2.CAP_GSTREAMER, 0, FPS, (WIDTH, HEIGHT), True)
-
 
 #checks if there is connection to the camera and if GStreamer could start udpsink correct
 #if not the program is exited.
@@ -126,7 +99,6 @@ finally:
 
     ai_queue.put(None)
     cap.release()
-    #out_direct.release()
 
     #venter på at AI-tråden er lukket
     t.join(timeout=1.0)
