@@ -1,0 +1,1 @@
+from .video_inpainter import VideoInpainter
