@@ -169,14 +169,20 @@ class MainPage_zmq(ctk.CTkFrame):
             else:
                 mem_text = "N/A"
 
-            stats_text = (
+            # Left panel: raw camera input stats
+            left_stats_text = (
+                f"Resolution: {stats.get('resolution', '--')}\n"
+                f"FPS: {stats.get('cam_fps', '--')}\n"
+            )
+            # Right panel: AI pipeline stats
+            right_stats_text = (
                 f"Resolution: {stats.get('resolution', '--')}\n"
                 f"FPS: {stats.get('fps', '--')}\n"
                 f"Latency: {stats.get('latency_ms', '--')} ms\n"
                 f"Memory: {mem_text}\n"
             )
-            self.desc_left.configure(text=stats_text)
-            self.desc_right.configure(text=stats_text)
+            self.desc_left.configure(text=left_stats_text)
+            self.desc_right.configure(text=right_stats_text)
         except queue.Empty:
             pass
 

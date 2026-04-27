@@ -86,9 +86,13 @@ socket_stats.bind(f"tcp://*:{STATS_PORT}")
 #Generating a GStream-pipeline -> collects the video from the CSI-camera and converts it to a format OpenCV can read.
 #Image processing happens on the GPU to spare the CPU's power
 def gstreamer_pipeline_in(sensor_id=0, w=WIDTH, h=HEIGHT, fps=FPS):
+    # nvarguscamerasrc caps select the sensor mode (native resolution).
+    # A second nvvidconv stage performs the actual scaling to w x h.
     return (
         f"nvarguscamerasrc sensor-id={sensor_id} ! "
-        f"video/x-raw(memory:NVMM), width={w}, height={h}, framerate={fps}/1, format=NV12 ! "
+        f"video/x-raw(memory:NVMM), framerate={fps}/1, format=NV12 ! "
+        f"nvvidconv ! "
+        f"video/x-raw(memory:NVMM), width={w}, height={h} ! "
         f"nvvidconv ! video/x-raw, format=BGRx ! "
         f"videoconvert ! video/x-raw, format=BGR ! appsink"
     )
@@ -140,6 +144,8 @@ def make_mask_overlay(frame, mask):
 
 
 ai_queue = queue.Queue(maxsize=1)
+cam_stats = {"fps": 0.0}   # updated by main loop, read by ai_thread for stats payload
+_cam_fps_counter = {"n": 0, "t0": time.time()}
 device = "cuda" if torch.cuda.is_available() else "cpu"
 segmenter = YOLOSegmenter(model_name=args.seg_model, model_path=args.seg_model_path)
 inpainter, window_size = build_inpainter(args.inpaint_model, device)
@@ -209,6 +215,7 @@ def ai_thread():
 
             stats_payload = {
                 "resolution": f"{WIDTH}x{HEIGHT}",
+                "cam_fps": round(cam_stats["fps"], 2),
                 "fps": round(stats_counter["n"] / stats_elapsed, 2),
                 "latency_ms": round(stats_counter["sum_total_ms"] / n, 2),
                 "stage_ms": round(stats_counter["sum_stage_ms"] / n, 2),
@@ -281,6 +288,14 @@ try:
             ai_queue.put_nowait((frame_id, frame, time.time()))
         except queue.Full:
             pass
+
+        # Track camera capture FPS for the stats payload
+        _cam_fps_counter["n"] += 1
+        _elapsed = time.time() - _cam_fps_counter["t0"]
+        if _elapsed >= 2.0:
+            cam_stats["fps"] = _cam_fps_counter["n"] / _elapsed
+            _cam_fps_counter["n"] = 0
+            _cam_fps_counter["t0"] = time.time()
 
         frame_id += 1
 
