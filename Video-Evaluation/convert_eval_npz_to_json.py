@@ -49,10 +49,10 @@ def main():
         'dataset': args.dataset,
         'mask_type': args.mask_type,
         'num_videos': len(clip_labels),
-        'psnr': round(psnr, 4) if psnr is not None else None,
-        'ssim': round(ssim, 4) if ssim is not None else None,
-        'vfid': round(vfid, 4) if vfid is not None else None,
-        'ewarp': round(ewarp, 6) if ewarp is not None else None,
+        'psnr': round(psnr, 6) if psnr is not None else None,
+        'ssim': round(ssim, 6) if ssim is not None else None,
+        'vfid': round(vfid, 6) if vfid is not None else None,
+        'ewarp': round(ewarp, 8) if ewarp is not None else None,
         'ewarp_x1e2': round(ewarp_x1e2, 3) if ewarp_x1e2 is not None else None,
     }
 

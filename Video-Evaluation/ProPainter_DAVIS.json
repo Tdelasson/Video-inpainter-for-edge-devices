@@ -4,9 +4,9 @@
   "mask_type": "synthetic_inverted",
   "num_videos": 50,
   "fp16": true,
-  "psnr": 35.4586,
-  "ssim": 0.981,
-  "vfid": 0.391,
-  "ewarp": 0.001251,
+  "psnr": 35.458609,
+  "ssim": 0.981024,
+  "vfid": 0.390979,
+  "ewarp": 0.00125124,
   "ewarp_x1e2": 0.125
 }
