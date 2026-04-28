@@ -3,17 +3,20 @@ import torch
 
 
 class ViperAdapter:
-    def __init__(self, model_path, device="cuda", seq_len=5):
+    def __init__(self, model_path, device="cuda", seq_len=5, fp16=False):
         from model_architecture.viper import Viper
 
         self.device = device
         self.seq_len = seq_len
         in_channels = seq_len * 3 + seq_len
 
-        self.model = Viper(in_channels=in_channels).to(device)
+        self.model = Viper(in_channels=in_channels, base_channels=128, num_layers=4).to(device)
         self.model.load_state_dict(torch.load(model_path, map_location=device))
         self.model.eval()
         self.hidden_state = None
+
+        if fp16:
+            self.model = self.model.half()
 
     def inpaint(self, frame_list, mask_list, resize_to_original=True):
         if len(frame_list) < self.seq_len:
