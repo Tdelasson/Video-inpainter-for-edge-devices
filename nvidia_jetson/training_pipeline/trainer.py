@@ -297,13 +297,13 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                         with open(os.path.join(save_dir, "val_log.jsonl"), "a") as f:
                             f.write(json.dumps({"iter": current_iter, **val_metrics}) + "\n")
 
-                    else:
-                            print(f"Skipping validation for human/irregular mask phase at iter {current_iter}")
-                            torch.save(model.state_dict(),
-                                        os.path.join(save_dir, f"model_iter_{current_iter}.pth"))
-                            torch.save(discriminator.state_dict(),
-                                       os.path.join(save_dir, f"disc_iter_{current_iter}.pth"))
-                            print(f"Model checkpoint saved at iter {current_iter}")
+                elif current_iter % 20000 == 0:
+                    print(f"Skipping validation for human/irregular mask phase at iter {current_iter}")
+                    torch.save(model.state_dict(),
+                                os.path.join(save_dir, f"model_iter_{current_iter}.pth"))
+                    torch.save(discriminator.state_dict(),
+                               os.path.join(save_dir, f"disc_iter_{current_iter}.pth"))
+                    print(f"Model checkpoint saved at iter {current_iter}")
 
             if current_iter >= args.iterations:
                 break
