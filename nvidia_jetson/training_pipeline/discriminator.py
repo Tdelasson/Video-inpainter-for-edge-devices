@@ -15,9 +15,7 @@ class SpatioTemporalDiscriminator(torch.nn.Module):
             conv_block(in_channels, 64),
             conv_block(64, 128),
             conv_block(128, 256),
-            torch.nn.AdaptiveAvgPool3d(1),
-            torch.nn.Flatten(),
-            torch.nn.Linear(256, 1)
+            torch.nn.Conv3d(256, 1, kernel_size=3, padding=1)
         )
 
     def forward(self, x):
