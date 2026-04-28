@@ -2,10 +2,10 @@ from .unet_cell import UNetCell
 from torch import nn
 import torch
 
-class VideoInpainter(nn.Module):
+class Viper(nn.Module):
     def __init__(self, in_channels: int, base_channels: int, num_layers: int,
                  kernel_size: int=3, stride: int=1, padding: int=1):
-        super(VideoInpainter, self).__init__()
+        super(Viper, self).__init__()
         self.unet_cell = UNetCell(in_channels, base_channels, num_layers,
                                   kernel_size, stride, padding)
         self.num_layers = num_layers

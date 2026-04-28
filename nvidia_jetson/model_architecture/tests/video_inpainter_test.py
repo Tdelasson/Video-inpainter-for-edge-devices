@@ -1,6 +1,6 @@
 import torch
 import pytest
-from ..video_inpainter import VideoInpainter
+from ..viper import Viper
 
 class VideoInpainterTest:
 
@@ -9,7 +9,7 @@ class VideoInpainterTest:
         base_channels: 32
         num_layers: 3
 
-        model = VideoInpainter(in_channels=in_channels, base_channels=base_channels, num_layers=num_layers)
+        model = Viper(in_channels=in_channels, base_channels=base_channels, num_layers=num_layers)
 
         input_tensor = torch.randn(1, in_channels, 64, 64)
 
@@ -23,7 +23,7 @@ class VideoInpainterTest:
         base_channels: 32
         num_layers: 3
 
-        model = VideoInpainter(in_channels=in_channels, base_channels=base_channels, num_layers=num_layers)
+        model = Viper(in_channels=in_channels, base_channels=base_channels, num_layers=num_layers)
 
         input_tensor = torch.randn(1, 100, in_channels, 64, 64)
 

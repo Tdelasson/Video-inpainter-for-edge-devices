@@ -116,6 +116,8 @@ def build_inpainter(model_name: str, device: str):
         ), 12
     if model_name == "vinet":
         return ViNETAdapter(str(DEFAULT_VINET_WEIGHTS_PATH), device=device, fp16=args.fp16), 10
+    if model_name == "viper":
+        pass
     raise ValueError(f"Unsupported inpaint model: {model_name}")
 
 
@@ -232,7 +234,7 @@ if not cap.isOpened():
     sys.exit()
 
 
-#makes threading after we know the camera is accessible 
+#makes threading after we know the camera is accessible
 t = threading.Thread(target=ai_thread, daemon=True)
 t.start()
 
@@ -246,7 +248,7 @@ print(f"Inpainting model: {args.inpaint_model}")
 
 #starts the main loop which retrieves images from the camera and sendes them
 #through the network until the user interrupts the program.
-try: 
+try:
     frame_id = 0
     while True:
         ret, frame = cap.read()

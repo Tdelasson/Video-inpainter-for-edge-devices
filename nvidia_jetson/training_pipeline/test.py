@@ -8,7 +8,7 @@ from training_pipeline.config import *
 from training_pipeline.dataset import YouTubeVOSDataset, IrregularMaskDataset
 from training_pipeline.mask_generator import generate_arbitrary_shape_mask, random_dilate_and_blur_mask
 from training_pipeline.inpainting_loss import InpaintingLoss
-from model_architecture.video_inpainter import VideoInpainter
+from model_architecture.viper import Viper
 import argparse
 
 
@@ -47,7 +47,7 @@ def test(args):
 
     # --- Model ---
     in_channels = args.seq_len * 3 + args.seq_len
-    model = VideoInpainter(
+    model = Viper(
         in_channels=in_channels,
         base_channels=BASE_CHANNELS,
         num_layers=NUM_LAYERS
