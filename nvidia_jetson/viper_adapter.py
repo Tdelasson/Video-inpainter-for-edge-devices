@@ -25,7 +25,7 @@ class ViperAdapter:
         # Convert lists to tensors
         # Expected shape: [T, H, W, C] -> [T, C, H, W]
         frames = [torch.from_numpy(f).permute(2, 0, 1).float() / 255.0 for f in frame_list[-self.seq_len:]]
-        masks = [torch.from_numpy(m).float().unsqueeze(0) / 255.0 for m in mask_list[-self.seq_len:]]
+        masks = [torch.from_numpy(m).float().unsqueeze(0).clamp(0.0, 1.0) for m in mask_list[-self.seq_len:]]
 
         video_tensor = torch.stack(frames).unsqueeze(0).to(self.device)  # [1, T, 3, H, W]
         mask_tensor = torch.stack(masks).unsqueeze(0).to(self.device)  # [1, T, 1, H, W]
