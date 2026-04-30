@@ -264,46 +264,10 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
 
                 current_iter += 1
 
-                if current_iter % 5000 == 0:
-                    if args.mask_type != "human" and args.mask_type != "arbitrary":
-                        val_metrics = validate(
-                            args, model, flow_model, val_loader,
-                            val_mask_dataset, criterion, device, save_dir, current_iter
-                        )
-
-                        print(
-                            f"[VAL] Iter {current_iter} | "
-                            f"Total: {val_metrics['total']:.4f} | "
-                            f"Mask L1: {val_metrics['mask']:.4f} | "
-                            f"PSNR: {val_metrics['psnr']:.2f}dB | "
-                            f"Temp Consistency: {val_metrics.get('temporal_consistency', 0):.4f}"
-                        )
-
-                        # Save best model
-                        if val_metrics["total"] < best_val_loss:
-                            best_val_loss = val_metrics["total"]
-                            patience_counter = 0
-                            torch.save(model.state_dict(),
-                                       os.path.join(save_dir, "best_model.pth"))
-                            print(f"Model saved")
-                        else:
-                            patience_counter += 1
-                            print(f"No improvement ({patience_counter}/{EARLY_STOP_PATIENCE})")
-                            if patience_counter >= EARLY_STOP_PATIENCE:
-                                print(f"Early stopping triggered at iter {current_iter}")
-                                return {k: np.mean(v) for k, v in metrics_history.items()}
-
-                        # Log to file
-                        with open(os.path.join(save_dir, "val_log.jsonl"), "a") as f:
-                            f.write(json.dumps({"iter": current_iter, **val_metrics}) + "\n")
-
-                elif current_iter % 20000 == 0:
-                    print(f"Skipping validation for human/irregular mask phase at iter {current_iter}")
+                if current_iter % 10000 == 0:
                     torch.save(model.state_dict(),
-                                os.path.join(save_dir, f"model_iter_{current_iter}.pth"))
-                    torch.save(discriminator.state_dict(),
-                               os.path.join(save_dir, f"disc_iter_{current_iter}.pth"))
-                    print(f"Model checkpoint saved at iter {current_iter}")
+                               os.path.join(save_dir, "best_model.pth"))
+                    print(f"Model saved")
 
             if current_iter >= args.iterations:
                 break
