@@ -16,6 +16,7 @@ from Baselines.propainter_adapter import ProPainterAdapter
 from Baselines.vinet_adapter import ViNETAdapter
 from Metrics.metrics import measure_video_run
 from Test_Data.dataloader import TestDataset
+from viper_adapter import ViperAdapter
 
 REPO_ROOT = Path(__file__).resolve().parent
 DEFAULT_RESULTS_DIR = REPO_ROOT / "Results2"
@@ -26,6 +27,7 @@ DEFAULT_PROPAINTER_FLOW_WEIGHTS_PATH = (
     REPO_ROOT / "../Baselines_Repos/pthFiles/ProPainter/recurrent_flow_completion.pth"
 ).resolve()
 DEFAULT_VINET_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/ViNETsave_agg_rec_512.pth").resolve()
+DEFAULT_VIPER_WEIGHTS_PATH = (REPO_ROOT / "final_model.pth").resolve()
 DEFAULT_SPLITS = [
     ("DAVIS", "synthetic"),
     ("DAVIS", "RealObject"),
@@ -49,7 +51,7 @@ def parse_args() -> argparse.Namespace:
         "--model",
         type=str,
         default="fuseformer_om",
-        choices=["fuseformer_om", "propainter", "vinet"],
+        choices=["fuseformer_om", "propainter", "vinet", "viper"],
         help="Model adapter to run",
     )
     parser.add_argument(
@@ -93,6 +95,12 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=DEFAULT_PROPAINTER_FLOW_WEIGHTS_PATH,
         help="Path to recurrent flow completion weights (used by ProPainter)",
+    )
+    parser.add_argument(
+        "--viper-seq-len",
+        type=int,
+        default=5,
+        help="Sequence length for Viper adapter",
     )
     parser.add_argument(
         "--fp16",
@@ -143,12 +151,46 @@ def _build_adapter(args: argparse.Namespace, device: str):
         )
         return adapter, adapter.model_h, adapter.model_w
 
+    if model_key == "viper":
+        weights_path = args.weights_path or DEFAULT_VIPER_WEIGHTS_PATH
+        adapter = ViperAdapter(
+            model_path=str(weights_path),
+            device=device,
+            seq_len=args.viper_seq_len,
+            fp16=args.fp16,
+        )
+        if not hasattr(adapter, "name"):
+            adapter.name = "viper"
+        return adapter, getattr(adapter, "model_h", None), getattr(adapter, "model_w", None)
+
     raise ValueError(f"Unsupported model: {args.model}")
+
+
+def _run_video_inpaint(adapter, model_key: str, frames: list[np.ndarray], masks: list[np.ndarray]) -> list[np.ndarray]:
+    if model_key != "viper":
+        return adapter.inpaint(frames, masks, resize_to_original=False)
+
+    # Viper requires exactly seq_len frames. Repeat-pad with the first real frame
+    # so predictions are produced from frame 0 (evaluation-only; not applied in streaming).
+    if hasattr(adapter, "hidden_state"):
+        adapter.hidden_state = None
+
+    seq_len = adapter.seq_len
+    outputs: list[np.ndarray] = []
+    for idx in range(len(frames)):
+        pad = max(0, seq_len - (idx + 1))
+        padded_frames = [frames[0]] * pad + frames[: idx + 1]
+        padded_masks = [masks[0]] * pad + masks[: idx + 1]
+        pred = adapter.inpaint(padded_frames, padded_masks, resize_to_original=False)
+        outputs.append(pred[-1])
+
+    return outputs
 
 
 def main() -> None:
     args = parse_args()
     eval_splits = parse_splits(args.splits)
+    model_key = args.model.lower()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
@@ -175,7 +217,7 @@ def main() -> None:
             print(f"Inpainting '{video.name}' ({len(video.frames)} frames)")
 
             result, perf = measure_video_run(
-                lambda: adapter.inpaint(video.frames, video.masks, resize_to_original=False),
+                lambda: _run_video_inpaint(adapter, model_key, video.frames, video.masks),
                 num_frames=len(video.frames),
                 use_cuda=(device == "cuda"),
             )

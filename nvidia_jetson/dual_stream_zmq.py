@@ -16,14 +16,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from Baselines.fuseformer_om_adapter import FuseFormerOMAdapter
 from Baselines.propainter_adapter import ProPainterAdapter
 from Baselines.vinet_adapter import ViNETAdapter
+from viper_adapter import ViperAdapter
 from Masking.yolo_segmenter import YOLOSegmenter
 
 #PC_IP = "xxx.xxx.xxx.xxx"
 DIRECT_PORT = 5000
 AI_PORT = 5001
 STATS_PORT = 5002
-WIDTH = 448
-HEIGHT = 448
+WIDTH = 256
+HEIGHT = 256
 FPS = 30
 SENSOR_ID = 0
 
@@ -35,7 +36,7 @@ DEFAULT_PROPAINTER_FLOW_WEIGHTS_PATH = (
     REPO_ROOT / "../Baselines_Repos/pthFiles/ProPainter/recurrent_flow_completion.pth"
 ).resolve()
 DEFAULT_VINET_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/ViNETsave_agg_rec_512.pth").resolve()
-
+DEFAULT_VIPER_WEIGHTS_PATH = (REPO_ROOT / "final_model.pth").resolve()
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Dual ZMQ stream with segmentation and optional inpainting")
@@ -45,7 +46,7 @@ def parse_args() -> argparse.Namespace:
         "--inpaint-model",
         type=str,
         default="none",
-        choices=["none", "fuseformer_om", "propainter", "vinet"],
+        choices=["none", "fuseformer_om", "propainter", "vinet", "viper"],
         help="Optional baseline inpainting model",
     )
     parser.add_argument(
@@ -116,6 +117,8 @@ def build_inpainter(model_name: str, device: str):
         ), 12
     if model_name == "vinet":
         return ViNETAdapter(str(DEFAULT_VINET_WEIGHTS_PATH), device=device, fp16=args.fp16), 10
+    if model_name == "viper":
+        return ViperAdapter(str(DEFAULT_VIPER_WEIGHTS_PATH), device=device, seq_len=5, fp16=args.fp16), 5
     raise ValueError(f"Unsupported inpaint model: {model_name}")
 
 
@@ -232,7 +235,7 @@ if not cap.isOpened():
     sys.exit()
 
 
-#makes threading after we know the camera is accessible 
+#makes threading after we know the camera is accessible
 t = threading.Thread(target=ai_thread, daemon=True)
 t.start()
 
@@ -246,7 +249,7 @@ print(f"Inpainting model: {args.inpaint_model}")
 
 #starts the main loop which retrieves images from the camera and sendes them
 #through the network until the user interrupts the program.
-try: 
+try:
     frame_id = 0
     while True:
         ret, frame = cap.read()

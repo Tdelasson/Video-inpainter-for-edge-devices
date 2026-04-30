@@ -1,1 +1,1 @@
-from .video_inpainter import VideoInpainter
+from .viper import Viper
