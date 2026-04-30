@@ -1,21 +1,21 @@
 import customtkinter as ctk
 import cv2
-#print(cv2.getBuildInformation())
 import zmq
 import numpy as np
 import queue
 import threading
+import json
 
 
 from components.header_content import Header
 from components.text import BodyText
 from components.theme import Theme
 from PIL import Image
-from collections import deque
 
 JETSON_IP = "192.168.137.108"
 DIRECT_PORT = 5000
 AI_PORT = 5001
+STATS_PORT = 5002
 
 class MainPage_zmq(ctk.CTkFrame):
     def __init__(self, parent, controller):
@@ -25,122 +25,132 @@ class MainPage_zmq(ctk.CTkFrame):
         #Queue setup
         self.frame_queue_l = queue.Queue(maxsize=1)
         self.frame_queue_r = queue.Queue(maxsize=1)
+        self.stats_queue = queue.Queue(maxsize=1)
 
         #Zmq sockets setup
         self.context = zmq.Context()
         self.sub_direct = self.setup_socket(DIRECT_PORT)
         self.sub_ai = self.setup_socket(AI_PORT)
+        self.sub_stats = self.setup_socket(STATS_PORT)
 
         self.grid_columnconfigure((0, 1), weight=1)
 
-        #Left side
-        self.container_left = ctk.CTkFrame(self, fg_color=Theme.TP)
-        self.container_left.grid(row=2, column=0, padx = 80, pady=(90,0), sticky="ew")
-       
-        self.display_left = ctk.CTkLabel(self.container_left, text="Connecting to Jetson...", width=550, height=350)
-        self.display_left.grid(row=4, column=0, padx=10, pady=20)
 
-        self.title_left = BodyText(self.container_left, text="Input")
-        self.title_left.grid(row=2, column=0, padx=10, sticky="w")
+        self.left_side = VideoSection(self, title="Input")
+        self.left_side.grid(row=2, column=0, padx = 80, pady=(90,0), sticky="ew")
+        self.right_side = VideoSection(self, title="Output")
+        self.right_side.grid(row=2, column=1, padx = 80, pady=(90,0), sticky="ew")
 
-        self.desc_left = BodyText(self.container_left, text="")
-        self.desc_left.grid(row=5, column=0, padx=10, pady=(2,10), sticky="w")
 
-        #Right side
-        self.container_right = ctk.CTkFrame(self, fg_color=Theme.TP)
-        self.container_right.grid(row=2, column=1, padx = 80, pady=(90,0), sticky="ew")
-        
-        self.display_right = ctk.CTkLabel(self.container_right, text="Connecting to Jetson...", width=550, height=350)
-        self.display_right.grid(row=4, column=1, padx=10, pady=20)
+        self.display_left = self.left_side.display
+        self.display_right = self.right_side.display
+        self.desc_left = self.left_side.desc
+        self.desc_right = self.right_side.desc
 
-        self.title_right = BodyText(self.container_right, text="Output")
-        self.title_right.grid(row=2, column=1, padx=10, sticky="w")
-
-        self.desc_right = BodyText(self.container_right, text="")
-        self.desc_right.grid(row=5, column=1, padx=10, pady=(2,10), sticky="w")
-
-        stats_text = (
-            f"Resolution: X\n"
-            f"FPS: X\n"
-            f"Latency: X\n"
+        # Start background worker threads independently so a slow AI stream
+        # does not hold back the live camera preview.
+        self.left_thread = threading.Thread(
+            target=self.frame_worker,
+            args=(self.sub_direct, self.frame_queue_l),
+            daemon=True,
         )
-
-        self.desc_left.configure(text=stats_text)
-        self.desc_right.configure(text=stats_text)
-
-        #Start background worker thread
-        self.video_thread = threading.Thread(target=self.video_worker, daemon=True)
-        self.video_thread.start()
+        self.right_thread = threading.Thread(
+            target=self.frame_worker,
+            args=(self.sub_ai, self.frame_queue_r),
+            daemon=True,
+        )
+        self.stats_thread = threading.Thread(target=self.stats_worker, daemon=True)
+        self.left_thread.start()
+        self.right_thread.start()
+        self.stats_thread.start()
 
         self.update_frame()
 
     def setup_socket(self, port):
         socket = self.context.socket(zmq.SUB)
         socket.connect(f"tcp://{JETSON_IP}:{port}")
-        socket.setsockopt(zmq.SUBSCRIBE, b"")
-        socket.setsockopt(zmq.CONFLATE, 1)
+        socket.setsockopt(zmq.SUBSCRIBE, b"") #Let all message through
+        socket.setsockopt(zmq.CONFLATE, 1) #Keep only the lastest message in the buffer
         return socket
 
-    def video_worker(self):
+    def push_latest(self, target_queue, value):
+        if not target_queue.empty():
+            try:
+                target_queue.get_nowait()
+            except queue.Empty:
+                pass
+        target_queue.put(value)
+
+    def frame_worker(self, socket, target_queue):
         while self.running:
             try:
-                msg_l = self.sub_direct.recv()
-                img_l = self.process_image(msg_l)
-                if img_l:
-                    if not self.frame_queue_l.empty():
-                        try: self.frame_queue_l.get_nowait()
-                        except: pass
-                    self.frame_queue_l.put(img_l)
-                msg_r = self.sub_ai.recv()
-                img_r = self.process_image(msg_r)
-                if img_r:
-                    if not self.frame_queue_r.empty():
-                        try: self.frame_queue_r.get_nowait()
-                        except: pass
-                    self.frame_queue_r.put(img_r)
+                msg = socket.recv()
+                img = self.process_image(msg)
+                if img:
+                    self.push_latest(target_queue, img)
             except zmq.error.Again:
                 continue
             except Exception as e:
-                print(f"Worker Error {e}")
+                print(f"Video Worker Error {e}")
+
+    def stats_worker(self):
+        while self.running:
+            try:
+                stats_msg = self.sub_stats.recv()
+                stats = json.loads(stats_msg.decode("utf-8"))
+                self.push_latest(self.stats_queue, stats)
+            except zmq.error.Again:
+                continue
+            except Exception as e:
+                print(f"Stats Worker Error {e}")
 
     def update_frame(self):
         if not self.winfo_ismapped():
             self.after(500, self.update_frame)
             return
-        
-        #time_start = time.time()
-        # ret_direct, frame_direct = self.get_frame_from_zmq(self.sub_direct) #Tries to read frame
-        # ret_ai, frame_ai = self.get_frame_from_zmq(self.sub_ai)
 
         try:
-        # if ret_direct:
             img_l = self.frame_queue_l.get_nowait()
             if self.display_left.cget("text") != "":
                 self.display_left.configure(text="")
-            # img_l = self.process_image(frame_direct)
             self.display_left.configure(image=img_l)
         except queue.Empty:
             pass
-        #else:
-        #    self.cap_direct.set(cv2.CAP_PROP_POS_FRAMES, 0) #Replay video when ending
 
         try:
-        # if ret_direct:
             img_r = self.frame_queue_r.get_nowait()
             if self.display_right.cget("text") != "":
                 self.display_right.configure(text="")
-            # img_l = self.process_image(frame_direct)
             self.display_right.configure(image=img_r)
         except queue.Empty:
             pass
 
-        # if ret_ai:
-        #     img_r = self.process_image(frame_ai)
-        #     self.display_right.configure(image=img_r)
-        # #else:
-        #    self.cap_ai.set(cv2.CAP_PROP_POS_FRAMES, 0) #Replay video when ending
+        try:
+            stats = self.stats_queue.get_nowait()
+            mem_val = stats.get("memory_mb", -1)
+            if isinstance(mem_val, (int, float)) and mem_val >= 0:
+                mem_text = f"{mem_val:.2f} MB"
+            else:
+                mem_text = "N/A"
+
+            # Left panel: raw camera input stats
+            left_stats_text = (
+                f"Resolution: {stats.get('resolution', '--')}\n"
+                f"FPS: {stats.get('cam_fps', '--')}\n"
+            )
+            # Right panel: AI pipeline stats
+            right_stats_text = (
+                f"Resolution: {stats.get('resolution', '--')}\n"
+                f"FPS: {stats.get('fps', '--')}\n"
+                f"Latency: {stats.get('latency_ms', '--')} ms\n"
+                f"Memory: {mem_text}\n"
+            )
+            self.desc_left.configure(text=left_stats_text)
+            self.desc_right.configure(text=right_stats_text)
+        except queue.Empty:
+            pass
     
-        self.after(1, self.update_frame)
+        self.after(15, self.update_frame)
 
     #Convert ZMQ data to a CTkImgae for display
     def process_image(self, message):
@@ -152,4 +162,19 @@ class MainPage_zmq(ctk.CTkFrame):
                 pil_img = Image.fromarray(cv2_img)
                 return ctk.CTkImage(light_image=pil_img, size=(550, 350)) #UI size
             return None
-            
+
+class VideoSection(ctk.CTkFrame):
+    def __init__(self, parent, title):
+        super().__init__(parent, fg_color=Theme.TP)
+
+        #Title
+        self.title_label = BodyText(self, text=title)
+        self.title_label.grid(row=0, column=0, padx=10, sticky="w")
+
+        #Display
+        self.display = ctk.CTkLabel(self, text="Connecting to Jetson...", width=550, height=350)
+        self.display.grid(row=1, column=0, padx=10, pady=20)
+        
+        #Describtion stats text
+        self.desc = BodyText(self, text="")
+        self.desc.grid(row=2, column=0, padx=10, pady=(2,10), sticky="w")

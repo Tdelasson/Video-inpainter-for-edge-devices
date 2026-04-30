@@ -22,6 +22,7 @@ class App(ctk.CTk):
 
          container = ctk.CTkFrame(self, fg_color=Theme.TP)
          container.grid(row=1, column=0, sticky="nsew")
+         container.grid_propagate(False)
          container.grid_columnconfigure(0, weight=1)
          container.grid_rowconfigure(0, weight=1)
 
