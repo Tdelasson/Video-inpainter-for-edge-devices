@@ -5,6 +5,7 @@ nvidia_jetson/venv/
 nvidia_jetson/.idea/
 nvidia_jetson/Test_Data/DAVIS*
 nvidia_jetson/Test_Data/YouTube-VOS*
+nvidia_jetson/training_pipeline/*.png
 
 __pycache__/
 
