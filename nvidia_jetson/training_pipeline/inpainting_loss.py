@@ -39,7 +39,8 @@ class InpaintingLoss(torch.nn.Module):
         gram = torch.bmm(f, f.transpose(1, 2))
         return gram / (C * H * W)
 
-    def forward(self, output, target, mask, prev_output=None, flow=None, discriminator=None, fake_seq=None):
+    def forward(self, output, target, mask, prev_output_gt=None,
+            prev_output_model=None, flow=None, discriminator=None, fake_seq=None):
         if mask.shape[1] != output.shape[1]:
             mask = mask.expand_as(output)
 
@@ -50,11 +51,13 @@ class InpaintingLoss(torch.nn.Module):
         # Perceptual and Style (VGG)
         norm_output = self.normalize(output)
         norm_target = self.normalize(target)
-        out1, out2, out3 = self.slice1(norm_output), self.slice2(self.slice1(norm_output)), self.slice3(
-            self.slice2(self.slice1(norm_output)))
+        out1 = self.slice1(norm_output)
+        out2 = self.slice2(out1)
+        out3 = self.slice3(out2)
         with torch.no_grad():
-            tgt1, tgt2, tgt3 = self.slice1(norm_target), self.slice2(self.slice1(norm_target)), self.slice3(
-                self.slice2(self.slice1(norm_target)))
+            tgt1 = self.slice1(norm_target)
+            tgt2 = self.slice2(tgt1)
+            tgt3 = self.slice3(tgt2)
 
         perceptual_loss = (self.l1(out1, tgt1) + self.l1(out2, tgt2) + self.l1(out3, tgt3)) * self.perceptual_w
         style_loss = (self.l1(self.gram_matrix(out1), self.gram_matrix(tgt1)) +
@@ -63,10 +66,25 @@ class InpaintingLoss(torch.nn.Module):
 
         # Warped Temporal Loss
         temp_loss = torch.tensor(0.0, device=output.device)
-        if prev_output is not None and flow is not None:
-            warped_prev = warp(prev_output, flow)
+        if prev_output_gt is not None and prev_output_model is not None and flow is not None:
+            warped_gt = warp(prev_output_gt, flow)
+            warped_model = warp(prev_output_model, flow)
+
             unmasked = (1 - mask)
-            temp_loss = self.l1(output * unmasked, warped_prev * unmasked) * self.temporal_w
+
+            # Known pixels: enforce consistency with warped GT
+            temp_loss_unmasked = self.l1(
+                output * unmasked,
+                warped_gt * unmasked
+            )
+
+            # Masked pixels: enforce consistency with warped previous model output
+            temp_loss_masked = self.l1(
+                output * mask,
+                warped_model * mask
+            )
+
+            temp_loss = (temp_loss_unmasked + temp_loss_masked) * self.temporal_w
 
         # Adversarial Loss
         adv_loss = torch.tensor(0.0, device=output.device)

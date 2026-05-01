@@ -92,7 +92,8 @@ def validate(args, model, flow_model, val_loader, val_mask_dataset, criterion, d
                 # Losses — no discriminator during validation
                 total_loss, l1_m, l1_f, _, _, _, _ = criterion(
                     output=output, target=target, mask=target_mask,
-                    prev_output=None, flow=None,
+                    prev_output_gt=None,
+                    prev_output_model=None,
                     discriminator=None, fake_seq=None
                 )
 
@@ -166,7 +167,8 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
             masked_video = video_data * (1.0 - masks)
 
             hidden_state = None
-            prev_output = None
+            prev_output_gt = None
+            prev_output_model = None
             for t in range(0, T - args.seq_len + 1):
                 if current_iter >= args.iterations:
                     break
@@ -221,7 +223,9 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                 optimizer_model.zero_grad()
                 total_loss, l1_m, l1_f, perc_v, style_v, temp_v, adv = criterion(
                     output=output, target=target, mask=target_mask,
-                    prev_output=prev_output, flow=flow,
+                    prev_output_gt=prev_output_gt,
+                    prev_output_model=prev_output_model,
+                    flow=flow,
                     discriminator=discriminator, fake_seq=fake_seq
                 )
                 total_loss.backward()
@@ -244,7 +248,8 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                 # Prep for next window
                 with torch.no_grad():
                     composited = output * target_mask + target * (1 - target_mask)
-                    prev_output = target
+                    prev_output_gt = target
+                    prev_output_model = composited
 
                 # Logging & Saving
                 if current_iter % 10 == 0:
