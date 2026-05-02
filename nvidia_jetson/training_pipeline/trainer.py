@@ -6,6 +6,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from training_pipeline.config import *
+from training_pipeline.warp import warp
 
 # Pipeline Imports
 from training_pipeline.dataset import *
@@ -199,6 +200,13 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                 # Train Discriminator
                 optimizer_disc.zero_grad()
                 output, hidden_state = model(full_input, hidden_state)
+
+                if flow is not None and prev_output_model is not None and current_iter % 100 == 0:
+                    with torch.no_grad():
+                        warped = warp(prev_output_model, flow)
+                        print(f"Warp mean: {warped.mean():.4f} | "
+                              f"Diff from output: {(output - warped).abs().mean():.4f} | "
+                              f"Prev model mean: {prev_output_model.mean():.4f}")
 
                 if args.use_memory and hidden_state is not None:
                     hidden_state = hidden_state.detach()
