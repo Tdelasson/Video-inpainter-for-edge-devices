@@ -56,6 +56,30 @@ def parse_args() -> argparse.Namespace:
         choices=["auto", "mask", "inpaint"],
         help="Right stream mode: mask, inpaint, or auto",
     )
+    parser.add_argument(
+        "--propainter-ref-stride",
+        type=int,
+        default=10,
+        help="Stride of global reference frames (higher uses less memory)",
+    )
+    parser.add_argument(
+        "--propainter-neighbor-length",
+        type=int,
+        default=10,
+        help="Length of local neighboring frames (lower uses less memory)",
+    )
+    parser.add_argument(
+        "--propainter-subvideo-length",
+        type=int,
+        default=80,
+        help="Sub-video length for long videos (lower uses less memory)",
+    )
+    parser.add_argument(
+        "--propainter-raft-iters",
+        type=int,
+        default=20,
+        help="RAFT iterations for ProPainter flow estimation",
+    )
     parser.add_argument("--infer-every", type=int, default=2, help="Run inpainting every N frames")
     parser.add_argument("--fp16", action="store_true", help="Use fp16 where supported")
     parser.add_argument("--display", action="store_true", help="Optional local preview")
@@ -114,6 +138,10 @@ def build_inpainter(model_name: str, device: str):
             flow_weights_path=str(DEFAULT_PROPAINTER_FLOW_WEIGHTS_PATH),
             device=device,
             fp16=args.fp16,
+            ref_stride=args.propainter_ref_stride,
+            neighbor_length=args.propainter_neighbor_length,
+            subvideo_length=args.propainter_subvideo_length,
+            raft_iters=args.propainter_raft_iters,
         ), 12
     if model_name == "vinet":
         return ViNETAdapter(str(DEFAULT_VINET_WEIGHTS_PATH), device=device, fp16=args.fp16), 10

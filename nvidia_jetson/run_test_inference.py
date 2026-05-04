@@ -97,6 +97,30 @@ def parse_args() -> argparse.Namespace:
         help="Path to recurrent flow completion weights (used by ProPainter)",
     )
     parser.add_argument(
+        "--propainter-ref-stride",
+        type=int,
+        default=10,
+        help="Stride of global reference frames (higher uses less memory)",
+    )
+    parser.add_argument(
+        "--propainter-neighbor-length",
+        type=int,
+        default=10,
+        help="Length of local neighboring frames (lower uses less memory)",
+    )
+    parser.add_argument(
+        "--propainter-subvideo-length",
+        type=int,
+        default=80,
+        help="Sub-video length for long videos (lower uses less memory)",
+    )
+    parser.add_argument(
+        "--propainter-raft-iters",
+        type=int,
+        default=20,
+        help="RAFT iterations for ProPainter flow estimation",
+    )
+    parser.add_argument(
         "--viper-seq-len",
         type=int,
         default=5,
@@ -139,6 +163,10 @@ def _build_adapter(args: argparse.Namespace, device: str):
             flow_weights_path=str(args.flow_weights_path),
             device=device,
             fp16=args.fp16,
+            ref_stride=args.propainter_ref_stride,
+            neighbor_length=args.propainter_neighbor_length,
+            subvideo_length=args.propainter_subvideo_length,
+            raft_iters=args.propainter_raft_iters,
         )
         return adapter, adapter.model_h, adapter.model_w
 

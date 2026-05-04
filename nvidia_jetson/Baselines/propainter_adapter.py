@@ -58,11 +58,19 @@ class ProPainterAdapter(BaseVideoInpainter):
         flow_weights_path: str,
         device: str = "cuda",
         fp16: bool = False,
+        ref_stride: int = REF_STRIDE,
+        neighbor_length: int = NEIGHBOR_LENGTH,
+        subvideo_length: int = SUBVIDEO_LENGTH,
+        raft_iters: int = RAFT_ITERS,
     ):
         self.device = torch.device(device)
         self.use_half = fp16 and self.device.type == "cuda"
         self.model_h = MODEL_H
         self.model_w = MODEL_W
+        self.ref_stride = max(1, int(ref_stride))
+        self.neighbor_length = max(2, int(neighbor_length))
+        self.subvideo_length = max(8, int(subvideo_length))
+        self.raft_iters = max(1, int(raft_iters))
 
         RAFTBi, RecurrentFlowCompleteNet, InpaintGenerator = _import_propainter_modules()
 
@@ -159,9 +167,9 @@ class ProPainterAdapter(BaseVideoInpainter):
                 for f in range(0, video_length, short_clip_len):
                     end_f = min(video_length, f + short_clip_len)
                     if f == 0:
-                        flows_f, flows_b = self.fix_raft(frames[:, f:end_f], iters=RAFT_ITERS)
+                        flows_f, flows_b = self.fix_raft(frames[:, f:end_f], iters=self.raft_iters)
                     else:
-                        flows_f, flows_b = self.fix_raft(frames[:, f - 1:end_f], iters=RAFT_ITERS)
+                        flows_f, flows_b = self.fix_raft(frames[:, f - 1:end_f], iters=self.raft_iters)
                     gt_flows_f_list.append(flows_f)
                     gt_flows_b_list.append(flows_b)
                     self._empty_cuda_cache()
@@ -169,7 +177,7 @@ class ProPainterAdapter(BaseVideoInpainter):
                 gt_flows_b = torch.cat(gt_flows_b_list, dim=1)
                 gt_flows_bi = (gt_flows_f, gt_flows_b)
             else:
-                gt_flows_bi = self.fix_raft(frames, iters=RAFT_ITERS)
+                gt_flows_bi = self.fix_raft(frames, iters=self.raft_iters)
                 self._empty_cuda_cache()
 
             if self.use_half:
@@ -180,15 +188,15 @@ class ProPainterAdapter(BaseVideoInpainter):
                 gt_flows_bi = (gt_flows_bi[0].half(), gt_flows_bi[1].half())
 
             flow_length = gt_flows_bi[0].size(1)
-            if flow_length > SUBVIDEO_LENGTH:
+            if flow_length > self.subvideo_length:
                 pred_flows_f = []
                 pred_flows_b = []
                 pad_len = 5
-                for f in range(0, flow_length, SUBVIDEO_LENGTH):
+                for f in range(0, flow_length, self.subvideo_length):
                     s_f = max(0, f - pad_len)
-                    e_f = min(flow_length, f + SUBVIDEO_LENGTH + pad_len)
+                    e_f = min(flow_length, f + self.subvideo_length + pad_len)
                     pad_len_s = max(0, f) - s_f
-                    pad_len_e = e_f - min(flow_length, f + SUBVIDEO_LENGTH)
+                    pad_len_e = e_f - min(flow_length, f + self.subvideo_length)
                     pred_flows_bi_sub, _ = self.fix_flow_complete.forward_bidirect_flow(
                         (gt_flows_bi[0][:, s_f:e_f], gt_flows_bi[1][:, s_f:e_f]),
                         flow_masks[:, s_f : e_f + 1],
@@ -209,7 +217,7 @@ class ProPainterAdapter(BaseVideoInpainter):
                 self._empty_cuda_cache()
 
             masked_frames = frames * (1 - masks_dilated)
-            subvideo_length_img_prop = min(100, SUBVIDEO_LENGTH)
+            subvideo_length_img_prop = min(100, self.subvideo_length)
             if video_length > subvideo_length_img_prop:
                 updated_frames = []
                 updated_masks = []
@@ -255,9 +263,9 @@ class ProPainterAdapter(BaseVideoInpainter):
                 self._empty_cuda_cache()
 
             comp_frames = [None] * video_length
-            neighbor_stride = max(1, NEIGHBOR_LENGTH // 2)
-            if video_length > SUBVIDEO_LENGTH:
-                ref_num = SUBVIDEO_LENGTH // REF_STRIDE
+            neighbor_stride = max(1, self.neighbor_length // 2)
+            if video_length > self.subvideo_length:
+                ref_num = self.subvideo_length // self.ref_stride
             else:
                 ref_num = -1
 
@@ -269,7 +277,7 @@ class ProPainterAdapter(BaseVideoInpainter):
                         min(video_length, f + neighbor_stride + 1),
                     )
                 ]
-                ref_ids = _get_ref_index(f, neighbor_ids, video_length, REF_STRIDE, ref_num)
+                ref_ids = _get_ref_index(f, neighbor_ids, video_length, self.ref_stride, ref_num)
 
                 selected_ids = neighbor_ids + ref_ids
                 selected_imgs = updated_frames[:, selected_ids, :, :, :]
