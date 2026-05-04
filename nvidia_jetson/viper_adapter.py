@@ -21,7 +21,7 @@ class ViperAdapter:
             runtime = trt.Runtime(trt.Logger(trt.Logger.WARNING))
             engine = runtime.deserialize_cuda_engine(engine_data)
 
-            self.model = TRTModule(engine = engine, input_names=["input"], output_names=["output"])
+            self.model = TRTModule(engine = engine, input_names=["input"], output_names=["output", "add_251"])
 
         else:
             from model_architecture.viper import Viper
