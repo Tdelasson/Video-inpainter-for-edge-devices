@@ -23,8 +23,8 @@ from Masking.yolo_segmenter import YOLOSegmenter
 DIRECT_PORT = 5000
 AI_PORT = 5001
 STATS_PORT = 5002
-WIDTH = 256
-HEIGHT = 256
+WIDTH = 512
+HEIGHT = 512
 FPS = 30
 SENSOR_ID = 0
 
@@ -158,7 +158,7 @@ def ai_thread():
         frame_buffer.append(frame)
         mask_buffer.append(mask)
 
-        if inpainter is not None and (frame_id % args.infer_every) == 0 and len(frame_buffer) >= 2:
+        if inpainter is not None and (frame_id % args.infer_every) == 0 and len(frame_buffer) == window_size:
             try:
                 pred = inpainter.inpaint(list(frame_buffer), list(mask_buffer), resize_to_original=True)
                 if pred:
