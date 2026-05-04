@@ -68,24 +68,26 @@ class InpaintingLoss(torch.nn.Module):
         # Warped Temporal Loss
         temp_loss = torch.tensor(0.0, device=output.device)
         if prev_output_gt is not None and prev_output_model is not None and flow is not None:
-            warped_gt = warp(prev_output_gt, flow)
             warped_model = warp(prev_output_model, flow)
 
-            unmasked = (1 - mask)
+            with torch.no_grad():
+                # Test optical flow on the Ground Truth
+                warped_gt = warp(prev_output_gt, flow)
 
-            # Known pixels: enforce consistency with warped GT
-            temp_loss_unmasked = self.l1(
-                output * unmasked,
-                warped_gt * unmasked
-            )
+                # 2. Calculate flow error (L1 difference between warped GT and actual GT)
+                # We average across the color channels to get a single spatial map
+                flow_error = torch.abs(target - warped_gt).mean(dim=1, keepdim=True)
 
-            # Masked pixels: enforce consistency with warped previous model output
-            temp_loss_masked = self.l1(
-                output * mask,
-                warped_model * mask
-            )
+                # 3. Create a confidence mask.
+                # If error is 0, confidence is 1. If error is high, confidence drops toward 0.
+                # The multiplier (e.g., 10.0) controls how strict we are.
+                flow_confidence = torch.exp(-10.0 * flow_error)
 
-            temp_loss = (temp_loss_unmasked + temp_loss_masked) * self.temporal_w
+            # 4. Apply temporal loss ONLY to the masked area, and ONLY where flow is reliable.
+            temp_loss = self.l1(
+                output * mask * flow_confidence,
+                warped_model * mask * flow_confidence
+            ) * self.temporal_w
 
         # Adversarial Loss
         adv_loss = torch.tensor(0.0, device=output.device)

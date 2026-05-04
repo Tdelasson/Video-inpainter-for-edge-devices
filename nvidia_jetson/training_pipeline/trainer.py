@@ -197,8 +197,7 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
 
                         flow = flow_model(img1, img2)[-1]
 
-                # Train Discriminator
-                optimizer_disc.zero_grad()
+
                 output, hidden_state = model(full_input, hidden_state)
 
                 if flow is not None and prev_output_model is not None and current_iter % 100 == 0:
@@ -215,7 +214,9 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                 seq_frames = [window[:, i] for i in range(window.shape[1] - 1)] + [fake_frame]
                 fake_seq = torch.stack(seq_frames, dim=2)
 
-                if args.w_adv > 0:
+                # Train Discriminator
+                optimizer_disc.zero_grad()
+                if args.w_adv > 0 and current_iter % 2 == 0:
                     # Match the shape for the real pass
                     real_seq = window.permute(0, 2, 1, 3, 4)
                     d_real_loss = adversarial_criterion(discriminator(real_seq),
@@ -340,7 +341,7 @@ def main():
 
     # Optimizers
     opt_model = optim.Adam(model.parameters(), lr=args.lr)
-    opt_disc = optim.Adam(discriminator.parameters(), lr=args.lr * 1)
+    opt_disc = optim.Adam(discriminator.parameters(), lr=args.lr * 0.01)
 
     scheduler_model = CosineAnnealingLR(opt_model, T_max=args.iterations, eta_min=1e-5)
     scheduler_disc = CosineAnnealingLR(opt_disc, T_max=args.iterations, eta_min=1e-6)
