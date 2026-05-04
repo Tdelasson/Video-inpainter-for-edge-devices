@@ -21,6 +21,9 @@ class ViperAdapter:
             runtime = trt.Runtime(trt.Logger(trt.Logger.WARNING))
             engine = runtime.deserialize_cuda_engine(engine_data)
 
+            tensor_names = [engine.get_tensor_name(i) for i in range(engine.num_io_tensors)]
+            print(f"TRT Engine loaded. Input/Output tensors: {tensor_names}")
+
             self.model = TRTModule(engine = engine, input_names=["input_0"], output_names=["output_0"])
 
         else:
