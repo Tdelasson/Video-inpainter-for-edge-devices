@@ -13,7 +13,7 @@ class ViperAdapter:
 
         if model_path.endswith('.engine'):
             self.model = TRTModule()
-            self.model.load_state_dict(torch.load(model_path))
+            self.model.load_state_dict(torch.load(model_path, weights_only=False))
         else:
             from model_architecture.viper import Viper
             in_channels = seq_len * 3 + seq_len
