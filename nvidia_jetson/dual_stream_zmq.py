@@ -36,7 +36,7 @@ DEFAULT_PROPAINTER_FLOW_WEIGHTS_PATH = (
     REPO_ROOT / "../Baselines_Repos/pthFiles/ProPainter/recurrent_flow_completion.pth"
 ).resolve()
 DEFAULT_VINET_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/ViNETsave_agg_rec_512.pth").resolve()
-DEFAULT_VIPER_WEIGHTS_PATH = (REPO_ROOT / "video_inpainter_dynamic.engine").resolve()
+DEFAULT_VIPER_WEIGHTS_PATH = (REPO_ROOT / "final_model.pth").resolve()
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Dual ZMQ stream with segmentation and optional inpainting")
