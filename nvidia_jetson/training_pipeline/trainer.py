@@ -227,6 +227,12 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                     d_loss.backward()
                     optimizer_disc.step()
 
+                    if current_iter % 100 == 0:
+                        total_disc_grad = sum(p.grad.abs().sum().item()
+                                              for p in discriminator.parameters()
+                                              if p.grad is not None)
+                        print(f"Disc grad norm: {total_disc_grad:.6f}")
+
                 # Train Model
                 optimizer_model.zero_grad()
                 total_loss, l1_m, l1_f, perc_v, style_v, temp_v, adv = criterion(

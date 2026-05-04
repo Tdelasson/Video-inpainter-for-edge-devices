@@ -28,7 +28,8 @@ class InpaintingLoss(torch.nn.Module):
         self.register_buffer('mean', torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1))
         self.register_buffer('std', torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1))
 
-        self.bce = torch.nn.BCEWithLogitsLoss()
+        self.adv_criterion = torch.nn.MSELoss()
+
 
     def normalize(self, x):
         return (x - self.mean) / self.std
@@ -90,7 +91,7 @@ class InpaintingLoss(torch.nn.Module):
         adv_loss = torch.tensor(0.0, device=output.device)
         if discriminator is not None and fake_seq is not None:
             g_fake_pred = discriminator(fake_seq)
-            adv_loss = self.bce(g_fake_pred, torch.ones_like(g_fake_pred)) * self.adv_w
+            adv_loss = self.adv_criterion(g_fake_pred, torch.ones_like(g_fake_pred)) * self.adv_w
 
         total_loss = l1_mask + l1_frame + perceptual_loss + style_loss + temp_loss + adv_loss
 
