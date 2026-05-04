@@ -83,8 +83,14 @@ class ViperAdapter:
             mask_tensor = mask_tensor.half()
 
         # 3. Prepare TRT Input (Total 20 channels: 15 RGB + 5 Mask)
-        pixel_input = (video_tensor * (1.0 - mask_tensor)).reshape(B, T * C, H, W)
-        mask_input = mask_tensor.reshape(B, T, H, W)
+        # video_tensor is [1, 5, 3, 512, 512] -> Reshape to [1, 15, 512, 512]
+        pixel_input = (video_tensor * (1.0 - mask_tensor)).reshape(B, T * 3, H, W)
+
+        # mask_tensor is [1, 5, 1, 512, 512] -> Squeeze to [1, 5, 512, 512]
+        # This safely removes the 'C' dimension without confusing the total element count
+        mask_input = mask_tensor.squeeze(2)
+
+        # Now cat 15 channels + 5 channels = 20 channels
         full_input = torch.cat([pixel_input, mask_input], dim=1)
 
         with torch.no_grad():
