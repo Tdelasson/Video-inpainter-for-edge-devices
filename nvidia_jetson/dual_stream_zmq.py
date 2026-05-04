@@ -23,8 +23,8 @@ from Masking.yolo_segmenter import YOLOSegmenter
 DIRECT_PORT = 5000
 AI_PORT = 5001
 STATS_PORT = 5002
-WIDTH = 512
-HEIGHT = 512
+WIDTH = 256
+HEIGHT = 256
 FPS = 30
 SENSOR_ID = 0
 
