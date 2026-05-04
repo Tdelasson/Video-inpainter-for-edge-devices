@@ -55,10 +55,10 @@ class ViperAdapter:
 
         # Get original dimensions for final upscaling
         orig_h, orig_w = frame_list[-1].shape[:2]
-        target_res = (512, 512)  # Matches your TRT Engine optShapes
+        target_res = (256, 256)  # Matches your TRT Engine optShapes
 
         # 1. Resize and Convert to tensors
-        # We must resize to 512x512 here because TRT engines have fixed/optimized input sizes
+        # We must resize here because TRT engines have fixed/optimized input sizes
         frames = [
             torch.from_numpy(cv2.resize(f, target_res)).permute(2, 0, 1)
             for f in frame_list[-self.seq_len:]
@@ -68,7 +68,7 @@ class ViperAdapter:
             for m in mask_list[-self.seq_len:]
         ]
 
-        # Shape: [1, 5, 3, 512, 512] and [1, 5, 1, 512, 512]
+        # Shape: [1, 5, 3, res, res] and [1, 5, 1, res, res]
         video_tensor = torch.stack(frames).unsqueeze(0).to(self.device).float() / 255.0
         mask_raw = torch.stack(masks).unsqueeze(0).to(self.device).float().clamp(0.0, 1.0)
 
@@ -83,10 +83,10 @@ class ViperAdapter:
             mask_tensor = mask_tensor.half()
 
         # 3. Prepare TRT Input (Total 20 channels: 15 RGB + 5 Mask)
-        # video_tensor is [1, 5, 3, 512, 512] -> Reshape to [1, 15, 512, 512]
+        # video_tensor is [1, 5, 3, res, res] -> Reshape to [1, 15, res, res]
         pixel_input = (video_tensor * (1.0 - mask_tensor)).reshape(B, T * 3, H, W)
 
-        # mask_tensor is [1, 5, 1, 512, 512] -> Squeeze to [1, 5, 512, 512]
+        # mask_tensor is [1, 5, 1, res, res] -> Squeeze to [1, 5, res, res]
         # This safely removes the 'C' dimension without confusing the total element count
         mask_input = mask_tensor.squeeze(2)
 
@@ -100,7 +100,7 @@ class ViperAdapter:
             if self.hidden_state is not None:
                 self.hidden_state = self.hidden_state.detach()
 
-            # 4. Post-processing (Alpha Blending at 512x512)
+            # 4. Post-processing (Alpha Blending at resxres)
             target_mask = mask_tensor[:, -1]
             target_frame = video_tensor[:, -1]
             composited = output * target_mask + target_frame * (1 - target_mask)
