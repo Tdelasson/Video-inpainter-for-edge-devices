@@ -12,8 +12,16 @@ class ViperAdapter:
 
         if model_path.endswith('.engine'):
             from torch2trt import TRTModule
-            self.model = TRTModule()
-            self.model.load_engine(model_path)
+            import tensorrt as trt
+
+            with open(model_path,'rb') as f:
+                engine_data = f.read()
+
+            runtime = trt.Runtime(trt.Logger(trt.Logger.WARNING))
+            engine = runtime.deserialize_cuda_engine(engine_data)
+
+            self.model = TRTModule(engine = engine, input_names=["input_0"], output_names=["output_0"])
+        
         else:
             from model_architecture.viper import Viper
             in_channels = seq_len * 3 + seq_len
