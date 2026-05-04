@@ -1,7 +1,6 @@
 import torch
 import torch.nn.functional as F
 import numpy as np
-from torch2trt import TRTModule
 import torchvision.transforms.functional as TF
 
 
@@ -12,8 +11,9 @@ class ViperAdapter:
         self.fp16 = fp16
 
         if model_path.endswith('.engine'):
+            from torch2trt import TRTModule
             self.model = TRTModule()
-            self.model.load_state_dict(torch.load(model_path, weights_only=False))
+            self.model.load_engine(model_path)
         else:
             from model_architecture.viper import Viper
             in_channels = seq_len * 3 + seq_len
