@@ -1,0 +1,9 @@
+/usr/src/tensorrt/bin/trtexec \
+--onnx=video_inpainter_dynamic.onnx \
+--saveEngine=video_inpainter_dynamic.engine \
+--fp16 \
+--inputIOFormats=fp16:chw \
+--outputIOFormats=fp16:chw \
+--minShapes=input:1x20x256x256 \
+--optShapes=input:1x20x512x512 \
+--maxShapes=input:1x20x1024x1024
