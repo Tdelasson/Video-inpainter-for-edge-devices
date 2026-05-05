@@ -19,7 +19,7 @@ from Test_Data.dataloader import TestDataset
 from viper_adapter import ViperAdapter
 
 REPO_ROOT = Path(__file__).resolve().parent
-DEFAULT_RESULTS_DIR = REPO_ROOT / "Results2"
+DEFAULT_RESULTS_DIR = REPO_ROOT / "Results"
 DEFAULT_FUSEFORMER_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/OnlineInpainting/fuseformer.pth").resolve()
 DEFAULT_PROPAINTER_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/ProPainter/ProPainter.pth").resolve()
 DEFAULT_PROPAINTER_RAFT_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/ProPainter/raft-things.pth").resolve()
