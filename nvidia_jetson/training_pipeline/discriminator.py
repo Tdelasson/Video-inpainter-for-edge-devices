@@ -1,5 +1,20 @@
 import torch
 
+class NoisyDiscriminator(torch.nn.Module):
+    def __init__(self, discriminator):
+        super().__init__()
+        self.discriminator = discriminator
+        self.current_std = 0.0
+
+    def set_std(self, std):
+        self.current_std = std
+
+    def forward(self, x):
+        if self.current_std > 0:
+            noise = torch.randn_like(x) * self.current_std
+            x = torch.clamp(x + noise, 0.0, 1.0)
+        return self.discriminator(x)
+
 class SpatioTemporalDiscriminator(torch.nn.Module):
     def __init__(self, in_channels=3):
         super().__init__()

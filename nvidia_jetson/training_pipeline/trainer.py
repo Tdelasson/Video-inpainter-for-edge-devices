@@ -20,7 +20,7 @@ from training_pipeline.mask_generator import (
 )
 from training_pipeline.inpainting_loss import InpaintingLoss
 from torchvision.models.optical_flow import raft_small, Raft_Small_Weights
-from training_pipeline.discriminator import SpatioTemporalDiscriminator
+from training_pipeline.discriminator import SpatioTemporalDiscriminator, NoisyDiscriminator
 import argparse
 import json
 
@@ -214,26 +214,38 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                 seq_frames = [window[:, i] for i in range(window.shape[1] - 1)] + [fake_frame]
                 fake_seq = torch.stack(seq_frames, dim=2)
 
+                # INSTANCE NOISE ANNEALING
+                # Start at 0.1, decay to 0.0 over 75% of the total iterations
+                noise_decay_iters = args.iterations * 0.75
+                current_sigma = max(0.0, 0.1 * (1.0 - (current_iter / noise_decay_iters)))
+                discriminator.set_std(current_sigma)
+
                 # Only train Discriminator every third iteration
                 optimizer_disc.zero_grad()
                 if args.w_adv > 0 and current_iter % 3 == 0:
                     # Match the shape for the real pass
                     real_seq = window.permute(0, 2, 1, 3, 4)
+
+                    # The NoisyDiscriminator wrapper automatically adds noise here
                     d_real_loss = adversarial_criterion(discriminator(real_seq),
                                                         torch.ones_like(discriminator(real_seq)))
+
                     # Fake pass (detach to avoid updating model)
-                    d_fake_loss = adversarial_criterion(discriminator(fake_seq.detach()),
-                                                        torch.zeros_like(discriminator(fake_seq)))
+                    d_fake_pred = discriminator(fake_seq.detach())
+                    d_fake_loss = adversarial_criterion(d_fake_pred, torch.zeros_like(d_fake_pred))
+
                     d_loss = (d_real_loss + d_fake_loss) * 0.5
                     d_loss.backward()
-                    torch.nn.utils.clip_grad_norm_(discriminator.parameters(), max_norm=1.0)
+
+                    # You mentioned you added gradient clipping, ensure it is here:
+                    torch.nn.utils.clip_grad_norm_(discriminator.discriminator.parameters(), max_norm=1.0)
                     optimizer_disc.step()
 
                     if current_iter % 100 == 0:
                         total_disc_grad = sum(p.grad.abs().sum().item()
-                                              for p in discriminator.parameters()
+                                              for p in discriminator.discriminator.parameters()
                                               if p.grad is not None)
-                        print(f"Disc grad norm: {total_disc_grad:.6f}")
+                        print(f"Disc grad norm: {total_disc_grad:.6f} | Noise Std: {current_sigma:.4f}")
 
                 # Train Model
                 optimizer_model.zero_grad()
@@ -293,7 +305,8 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
             if current_iter >= args.iterations:
                 break
 
-    torch.save(discriminator.state_dict(), os.path.join(save_dir, "final_discriminator.pth"))
+    torch.save(discriminator.discriminator.state_dict(),
+               os.path.join(save_dir, "final_discriminator.pth"))
     return {k: np.mean(v) for k, v in metrics_history.items()}
 
 def save_previews(save_dir, it, comp, tgt, m_win):
@@ -321,7 +334,8 @@ def main():
     # Models
     in_channels = args.seq_len * 3 + args.seq_len
     model = Viper(in_channels=in_channels, base_channels=BASE_CHANNELS, num_layers=NUM_LAYERS).to(device)
-    discriminator = SpatioTemporalDiscriminator().to(device)
+    base_discriminator = SpatioTemporalDiscriminator().to(device)
+    discriminator = NoisyDiscriminator(base_discriminator)
 
     if args.resume_from:
         # Load Generator
@@ -333,7 +347,7 @@ def main():
         disc_path = args.resume_from.replace("final_model.pth", "final_discriminator.pth")
 
         if os.path.exists(disc_path):
-            discriminator.load_state_dict(torch.load(disc_path))
+            base_discriminator.load_state_dict(torch.load(disc_path))
             print(f"Resumed Discriminator from {disc_path}")
         else:
             print("No discriminator checkpoint found. Starting with a fresh Discriminator.")
