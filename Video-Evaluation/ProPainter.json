@@ -1,0 +1,15 @@
+{
+  "model": "ProPainter",
+  "dataset": "DAVIS",
+  "mask_type": "synthetic",
+  "fp16": true,
+  "num_videos": 50,
+  "fps": 1.5846,
+  "latency_ms": 631.5986,
+  "peak_memory_mb": 2059.9778,
+  "psnr": 35.4222,
+  "ssim": 0.9809,
+  "vfid": 0.4025,
+  "ewarp": 0.001251,
+  "ewarp_x1e2": 0.125
+}
