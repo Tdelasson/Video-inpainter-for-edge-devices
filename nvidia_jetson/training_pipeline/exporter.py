@@ -23,7 +23,7 @@ torch.onnx.export(
     dummy_input,
     "../video_inpainter_dynamic.onnx",
     export_params=True,
-    opset_version=13,
+    opset_version=18,
     do_constant_folding=True,
     input_names=['input'],
     output_names=['output'],
