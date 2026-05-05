@@ -1,3 +1,9 @@
+Export to onxx:
+cd nvidia_jetson/training_pipeline
+python exporter.py
+
+
+
 /usr/src/tensorrt/bin/trtexec \
 --onnx=video_inpainter_dynamic.onnx \
 --saveEngine=video_inpainter_dynamic.engine \
