@@ -56,6 +56,7 @@ def parse_args() -> argparse.Namespace:
         choices=["auto", "mask", "inpaint"],
         help="Right stream mode: mask, inpaint, or auto",
     )
+    parser.add_argument("--imgsz", type=int, default=256, help="Image size (must match TRT engine)")
     parser.add_argument("--infer-every", type=int, default=2, help="Run inpainting every N frames")
     parser.add_argument("--fp16", action="store_true", help="Use fp16 where supported")
     parser.add_argument("--display", action="store_true", help="Optional local preview")
@@ -133,7 +134,7 @@ ai_queue = queue.Queue(maxsize=1)
 cam_stats = {"fps": 0.0}   # updated by main loop, read by ai_thread for stats payload
 _cam_fps_counter = {"n": 0, "t0": time.time()}
 device = "cuda" if torch.cuda.is_available() else "cpu"
-segmenter = YOLOSegmenter(model_name=args.seg_model, model_path=args.seg_model_path, target_classes=[0])
+segmenter = YOLOSegmenter(model_name=args.seg_model, model_path=args.seg_model_path, target_classes=[0], imgsz = args.imgsz)
 inpainter, window_size = build_inpainter(args.inpaint_model, device)
 frame_buffer = deque(maxlen=max(1, window_size))
 mask_buffer = deque(maxlen=max(1, window_size))
