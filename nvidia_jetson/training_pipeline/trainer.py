@@ -214,9 +214,9 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                 seq_frames = [window[:, i] for i in range(window.shape[1] - 1)] + [fake_frame]
                 fake_seq = torch.stack(seq_frames, dim=2)
 
-                # Train Discriminator
+                # Only train Discriminator every third iteration
                 optimizer_disc.zero_grad()
-                if args.w_adv > 0 and current_iter % 2 == 0:
+                if args.w_adv > 0 and current_iter % 3 == 0:
                     # Match the shape for the real pass
                     real_seq = window.permute(0, 2, 1, 3, 4)
                     d_real_loss = adversarial_criterion(discriminator(real_seq),
@@ -226,6 +226,7 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                                                         torch.zeros_like(discriminator(fake_seq)))
                     d_loss = (d_real_loss + d_fake_loss) * 0.5
                     d_loss.backward()
+                    torch.nn.utils.clip_grad_norm_(discriminator.parameters(), max_norm=1.0)
                     optimizer_disc.step()
 
                     if current_iter % 100 == 0:
