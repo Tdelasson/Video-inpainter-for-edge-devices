@@ -357,7 +357,7 @@ def main():
 
     # Optimizers
     opt_model = optim.Adam(model.parameters(), lr=args.lr)
-    opt_disc = optim.Adam(discriminator.parameters(), lr=args.lr * 1.0)
+    opt_disc = optim.Adam(discriminator.parameters(), lr=args.lr * 4.0)
 
     scheduler_model = CosineAnnealingLR(opt_model, T_max=args.iterations, eta_min=1e-5)
     scheduler_disc = CosineAnnealingLR(opt_disc, T_max=args.iterations, eta_min=1e-6)
