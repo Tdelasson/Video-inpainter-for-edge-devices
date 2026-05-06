@@ -390,17 +390,14 @@ def main():
             mask_dataset = IrregularMaskDataset(
                 root_dir=os.path.join(os.getcwd(), "training_data", "irregular_mask", "disocclusion_img_mask"))
 
-    val_dataset = YouTubeVOSDataset(root_dir=os.path.join(os.getcwd(), "training_data", "train"))
-    val_loader = DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=2, drop_last=True)
-    val_mask_dataset = IrregularMaskDataset(
-        root_dir=os.path.join(os.getcwd(), #"training_data", "irregular_mask", "disocclusion_img_mask"
-                               )
-    )
+    #val_dataset = YouTubeVOSDataset(root_dir=os.path.join(os.getcwd(), "training_data", "train"))
+    #val_loader = DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=2, drop_last=True)
+    #val_mask_dataset = IrregularMaskDataset(root_dir=os.path.join(os.getcwd(), "training_data", "irregular_mask", "disocclusion_img_mask"))
 
     # Start Training
     final_metrics = train(
-        args, model, flow_model, discriminator, loader, val_loader,
-        mask_dataset, val_mask_dataset, opt_model, opt_disc,
+        args, model, flow_model, discriminator, loader, None,
+        mask_dataset, None, opt_model, opt_disc,
         scheduler_model, scheduler_disc, criterion, adv_crit, device, save_dir
     )
 
