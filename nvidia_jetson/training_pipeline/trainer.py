@@ -224,7 +224,7 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
 
                 # Only train Discriminator every third iteration
                 optimizer_disc.zero_grad()
-                if args.w_adv > 0 and current_iter % 2 == 0:
+                if args.w_adv > 0 and current_iter % 1 == 0:
                     # Match the shape for the real pass
                     real_seq = window.permute(0, 2, 1, 3, 4)
 
@@ -357,7 +357,7 @@ def main():
 
     # Optimizers
     opt_model = optim.Adam(model.parameters(), lr=args.lr)
-    opt_disc = optim.Adam(discriminator.parameters(), lr=args.lr * 0.05)
+    opt_disc = optim.Adam(discriminator.parameters(), lr=args.lr * 1.0)
 
     scheduler_model = CosineAnnealingLR(opt_model, T_max=args.iterations, eta_min=1e-5)
     scheduler_disc = CosineAnnealingLR(opt_disc, T_max=args.iterations, eta_min=1e-6)
