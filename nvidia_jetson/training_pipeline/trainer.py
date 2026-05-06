@@ -222,13 +222,12 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
 
                 # Only train Discriminator every third iteration
                 optimizer_disc.zero_grad()
-                if args.w_adv > 0 and current_iter % 3 == 0:
+                if args.w_adv > 0 and current_iter % 2 == 0:
                     # Match the shape for the real pass
                     real_seq = window.permute(0, 2, 1, 3, 4)
 
-                    # The NoisyDiscriminator wrapper automatically adds noise here
-                    d_real_loss = adversarial_criterion(discriminator(real_seq),
-                                                        torch.ones_like(discriminator(real_seq)))
+                    real_pred = discriminator(real_seq)
+                    d_real_loss = adversarial_criterion(real_pred, torch.ones_like(real_pred))
 
                     # Fake pass (detach to avoid updating model)
                     d_fake_pred = discriminator(fake_seq.detach())
@@ -238,7 +237,7 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                     d_loss.backward()
 
                     # You mentioned you added gradient clipping, ensure it is here:
-                    torch.nn.utils.clip_grad_norm_(discriminator.discriminator.parameters(), max_norm=1.0)
+                    torch.nn.utils.clip_grad_norm_(discriminator.discriminator.parameters(), max_norm=5.0)
                     optimizer_disc.step()
 
                     if current_iter % 100 == 0:
@@ -356,7 +355,7 @@ def main():
 
     # Optimizers
     opt_model = optim.Adam(model.parameters(), lr=args.lr)
-    opt_disc = optim.Adam(discriminator.parameters(), lr=args.lr * 0.01)
+    opt_disc = optim.Adam(discriminator.parameters(), lr=args.lr * 0.05)
 
     scheduler_model = CosineAnnealingLR(opt_model, T_max=args.iterations, eta_min=1e-5)
     scheduler_disc = CosineAnnealingLR(opt_disc, T_max=args.iterations, eta_min=1e-6)
