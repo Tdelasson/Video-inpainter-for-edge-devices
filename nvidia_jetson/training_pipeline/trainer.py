@@ -241,7 +241,7 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                     discriminator=discriminator, fake_seq=fake_seq
                 )
 
-                if current_iter >= 1000:
+                if current_iter >= 500:
                     total_loss.backward()
 
                     if args.w_adv == 0 or current_iter % 3 == 0:
