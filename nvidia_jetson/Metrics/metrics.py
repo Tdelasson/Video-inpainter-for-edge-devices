@@ -8,6 +8,15 @@ import tracemalloc
 import torch
 
 
+def _safe_cuda_mem_get_info() -> tuple[float | None, float | None]:
+    """Return CUDA free/total memory in MB when supported, else (None, None)."""
+    try:
+        free_bytes, total_bytes = torch.cuda.mem_get_info()
+    except Exception:
+        return None, None
+    return free_bytes / (1024 ** 2), total_bytes / (1024 ** 2)
+
+
 def measure_performance(
     model_fn: callable,
     num_warmup: int = 5,
@@ -40,6 +49,9 @@ def measure_performance(
 
     if use_cuda:
         torch.cuda.synchronize()
+        baseline_allocated_mb = torch.cuda.memory_allocated() / (1024 ** 2)
+        baseline_reserved_mb = torch.cuda.memory_reserved() / (1024 ** 2)
+        start_free_mb, total_cuda_mb = _safe_cuda_mem_get_info()
         torch.cuda.reset_peak_memory_stats()
 
         start = time.perf_counter()
@@ -48,7 +60,19 @@ def measure_performance(
             torch.cuda.synchronize()
         end = time.perf_counter()
 
-        peak_memory_mb = torch.cuda.max_memory_allocated() / (1024 ** 2)
+        peak_allocated_mb = torch.cuda.max_memory_allocated() / (1024 ** 2)
+        peak_reserved_mb = torch.cuda.max_memory_reserved() / (1024 ** 2)
+        end_free_mb, _ = _safe_cuda_mem_get_info()
+
+        # Backward-compatible headline metric: worst PyTorch-reported CUDA peak.
+        peak_memory_mb = max(peak_allocated_mb, peak_reserved_mb)
+
+        cuda_used_start_mb = None
+        cuda_used_end_mb = None
+        if start_free_mb is not None and total_cuda_mb is not None:
+            cuda_used_start_mb = total_cuda_mb - start_free_mb
+        if end_free_mb is not None and total_cuda_mb is not None:
+            cuda_used_end_mb = total_cuda_mb - end_free_mb
     else:
         tracemalloc.start()
 
@@ -65,11 +89,26 @@ def measure_performance(
     latency_ms = (total_time / num_runs) * 1000
     fps = num_runs / total_time
 
-    return {
+    metrics = {
         "fps": round(fps, 2),
         "latency_ms": round(latency_ms, 2),
         "peak_memory_mb": round(peak_memory_mb, 2),
     }
+
+    if use_cuda:
+        metrics.update(
+            {
+                "baseline_allocated_mb": round(baseline_allocated_mb, 2),
+                "baseline_reserved_mb": round(baseline_reserved_mb, 2),
+                "peak_allocated_mb": round(peak_allocated_mb, 2),
+                "peak_reserved_mb": round(peak_reserved_mb, 2),
+                "cuda_total_mb": round(total_cuda_mb, 2) if total_cuda_mb is not None else None,
+                "cuda_used_start_mb": round(cuda_used_start_mb, 2) if cuda_used_start_mb is not None else None,
+                "cuda_used_end_mb": round(cuda_used_end_mb, 2) if cuda_used_end_mb is not None else None,
+            }
+        )
+
+    return metrics
 
 def measure_video_run(
     video_fn: callable,
@@ -82,6 +121,9 @@ def measure_video_run(
 
     if use_cuda:
         torch.cuda.synchronize()
+        baseline_allocated_mb = torch.cuda.memory_allocated() / (1024 ** 2)
+        baseline_reserved_mb = torch.cuda.memory_reserved() / (1024 ** 2)
+        start_free_mb, total_cuda_mb = _safe_cuda_mem_get_info()
         torch.cuda.reset_peak_memory_stats()
 
         start = time.perf_counter()
@@ -89,7 +131,19 @@ def measure_video_run(
         torch.cuda.synchronize()
         end = time.perf_counter()
 
-        peak_memory_mb = torch.cuda.max_memory_allocated() / (1024 ** 2)
+        peak_allocated_mb = torch.cuda.max_memory_allocated() / (1024 ** 2)
+        peak_reserved_mb = torch.cuda.max_memory_reserved() / (1024 ** 2)
+        end_free_mb, _ = _safe_cuda_mem_get_info()
+
+        # Keep existing key while making it less likely to under-report.
+        peak_memory_mb = max(peak_allocated_mb, peak_reserved_mb)
+
+        cuda_used_start_mb = None
+        cuda_used_end_mb = None
+        if start_free_mb is not None and total_cuda_mb is not None:
+            cuda_used_start_mb = total_cuda_mb - start_free_mb
+        if end_free_mb is not None and total_cuda_mb is not None:
+            cuda_used_end_mb = total_cuda_mb - end_free_mb
     else:
         tracemalloc.start()
 
@@ -105,9 +159,24 @@ def measure_video_run(
     latency_ms = (total_time / num_frames) * 1000 if num_frames else 0.0
     fps = num_frames / total_time if total_time > 0 else 0.0
 
-    return result, {
+    metrics = {
         "fps": round(fps, 2),
         "latency_ms": round(latency_ms, 2),
         "peak_memory_mb": round(peak_memory_mb, 2),
         "total_time_s": round(total_time, 3),
     }
+
+    if use_cuda:
+        metrics.update(
+            {
+                "baseline_allocated_mb": round(baseline_allocated_mb, 2),
+                "baseline_reserved_mb": round(baseline_reserved_mb, 2),
+                "peak_allocated_mb": round(peak_allocated_mb, 2),
+                "peak_reserved_mb": round(peak_reserved_mb, 2),
+                "cuda_total_mb": round(total_cuda_mb, 2) if total_cuda_mb is not None else None,
+                "cuda_used_start_mb": round(cuda_used_start_mb, 2) if cuda_used_start_mb is not None else None,
+                "cuda_used_end_mb": round(cuda_used_end_mb, 2) if cuda_used_end_mb is not None else None,
+            }
+        )
+
+    return result, metrics
