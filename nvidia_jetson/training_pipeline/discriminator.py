@@ -19,11 +19,11 @@ class SpatioTemporalDiscriminator(torch.nn.Module):
     def __init__(self, in_channels=3):
         super().__init__()
 
-        def conv_block(in_f, out_f, stride=2, normalize=True):
+        def conv_block(in_f, out_f, kernel_size=(3, 4, 4), stride=(1, 2, 2), padding=(1, 1, 1), normalize=True):
             layers = [
                 torch.nn.utils.spectral_norm(
-                    torch.nn.Conv3d(in_f, out_f, kernel_size=4,
-                                    stride=stride, padding=1)
+                    torch.nn.Conv3d(in_f, out_f, kernel_size=kernel_size,
+                                    stride=stride, padding=padding)
                 )
             ]
             if normalize:
@@ -37,10 +37,9 @@ class SpatioTemporalDiscriminator(torch.nn.Module):
             conv_block(128, 256),
             conv_block(256, 512, stride=1),
             torch.nn.utils.spectral_norm(
-                torch.nn.Conv3d(512, 1, kernel_size=4, stride=1, padding=1)
+                torch.nn.Conv3d(512, 1, kernel_size=(3, 4, 4), stride=1, padding=(1, 1, 1))
             )
         )
 
     def forward(self, x):
         return self.model(x)
-
