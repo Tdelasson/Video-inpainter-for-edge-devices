@@ -9,6 +9,7 @@ nvidia_jetson/Results*
 nvidia_jetson/JetsonResults*
 nvidia_jetson/Masking/ultralytics-main*
 nvidia_jetson/Masking/yolo26*
+Video-Evaluation/EvaluationGraph.py
 /venv
 __pycache__/
 
