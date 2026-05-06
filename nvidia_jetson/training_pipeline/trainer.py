@@ -260,10 +260,12 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                     discriminator=discriminator, fake_seq=fake_seq
                 )
 
-                total_loss.backward()
+                # Only backpropagate and update the generator after 1000 iterations
+                if current_iter >= 1000:
+                    total_loss.backward()
 
-                if args.w_adv == 0 or current_iter % 3 == 0:
-                    optimizer_model.step()
+                    if args.w_adv == 0 or current_iter % 3 == 0:
+                        optimizer_model.step()
 
                 # Step Schedulers
                 scheduler_model.step()
