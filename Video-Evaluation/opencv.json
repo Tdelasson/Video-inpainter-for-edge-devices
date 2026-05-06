@@ -1,0 +1,15 @@
+{
+  "model": "OpenCV_Telea",
+  "dataset": "DAVIS",
+  "mask_type": "synthetic",
+  "fp16": false,
+  "num_videos": 50,
+  "fps": 310.9172,
+  "latency_ms": 3.6934,
+  "peak_memory_mb": 0.0,
+  "psnr": 29.1417,
+  "ssim": 0.9649,
+  "vfid": 1.189,
+  "ewarp": 0.001865,
+  "ewarp_x1e2": 0.186
+}

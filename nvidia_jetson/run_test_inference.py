@@ -12,6 +12,8 @@ import torch
 sys.path.insert(0, ".")
 
 from Baselines.fuseformer_om_adapter import FuseFormerOMAdapter
+from Baselines.constant_fill_adapter import ConstantFillAdapter
+from Baselines.opencv_inpaint_adapter import OpenCVInpaintAdapter
 from Baselines.propainter_adapter import ProPainterAdapter
 from Baselines.vinet_adapter import ViNETAdapter
 from Metrics.metrics import measure_video_run
@@ -51,7 +53,7 @@ def parse_args() -> argparse.Namespace:
         "--model",
         type=str,
         default="fuseformer_om",
-        choices=["fuseformer_om", "propainter", "vinet", "viper"],
+        choices=["fuseformer_om", "propainter", "vinet", "viper", "opencv_inpaint", "constant_fill"],
         help="Model adapter to run",
     )
     parser.add_argument(
@@ -63,7 +65,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--frames-subdir",
         type=str,
-        default="JPEGImages",
+        default="JPEGImages_432_240",
         help="Frame folder under Test_Data/<dataset> (e.g. JPEGImages or JPEGImages_432_240)",
     )
     parser.add_argument(
@@ -131,6 +133,19 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Run the adapter in fp16 mode",
     )
+    parser.add_argument(
+        "--opencv-method",
+        type=str,
+        default="telea",
+        choices=["telea", "ns"],
+        help="OpenCV inpainting method used when --model opencv_inpaint",
+    )
+    parser.add_argument(
+        "--opencv-radius",
+        type=float,
+        default=3.0,
+        help="OpenCV inpainting radius used when --model opencv_inpaint",
+    )
     return parser.parse_args()
 
 
@@ -190,6 +205,17 @@ def _build_adapter(args: argparse.Namespace, device: str):
         if not hasattr(adapter, "name"):
             adapter.name = "viper"
         return adapter, getattr(adapter, "model_h", None), getattr(adapter, "model_w", None)
+
+    if model_key == "opencv_inpaint":
+        adapter = OpenCVInpaintAdapter(
+            method=args.opencv_method,
+            radius=args.opencv_radius,
+        )
+        return adapter, None, None
+
+    if model_key == "constant_fill":
+        adapter = ConstantFillAdapter()
+        return adapter, None, None
 
     raise ValueError(f"Unsupported model: {args.model}")
 
@@ -260,6 +286,18 @@ def main() -> None:
                 "num_frames": len(video.frames),
             }
 
+            for opt_key in (
+                "baseline_allocated_mb",
+                "baseline_reserved_mb",
+                "peak_allocated_mb",
+                "peak_reserved_mb",
+                "cuda_total_mb",
+                "cuda_used_start_mb",
+                "cuda_used_end_mb",
+            ):
+                if opt_key in perf and perf[opt_key] is not None:
+                    video_metrics[opt_key] = perf[opt_key]
+
             if mask_type == "synthetic":
                 save_prediction_video(video.name, result, official_pred_root)
 
@@ -274,7 +312,18 @@ def main() -> None:
         }
 
         if split_metrics:
-            for key in ("fps", "latency_ms", "peak_memory_mb"):
+            for key in (
+                "fps",
+                "latency_ms",
+                "peak_memory_mb",
+                "baseline_allocated_mb",
+                "baseline_reserved_mb",
+                "peak_allocated_mb",
+                "peak_reserved_mb",
+                "cuda_total_mb",
+                "cuda_used_start_mb",
+                "cuda_used_end_mb",
+            ):
                 vals = [m[key] for m in split_metrics if key in m]
                 if vals:
                     summary[key] = round(float(np.mean(vals)), 4)
