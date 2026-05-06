@@ -249,7 +249,9 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                         print(f"Disc grad norm: {total_disc_grad:.6f} | Noise Std: {current_sigma:.4f}")
 
                 # Train Model
-                optimizer_model.zero_grad()
+                if args.w_adv == 0 or current_iter % 3 == 0:
+                    optimizer_model.zero_grad()
+
                 total_loss, l1_m, l1_f, perc_v, style_v, temp_v, adv = criterion(
                     output=output, target=target, mask=target_mask,
                     prev_output_gt=prev_output_gt,
@@ -257,9 +259,11 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                     flow=flow,
                     discriminator=discriminator, fake_seq=fake_seq
                 )
+
                 total_loss.backward()
 
-                optimizer_model.step()
+                if args.w_adv == 0 or current_iter % 3 == 0:
+                    optimizer_model.step()
 
                 # Step Schedulers
                 scheduler_model.step()
@@ -357,7 +361,7 @@ def main():
 
     # Optimizers
     opt_model = optim.Adam(model.parameters(), lr=args.lr)
-    opt_disc = optim.Adam(discriminator.parameters(), lr=args.lr * 4.0)
+    opt_disc = optim.Adam(discriminator.parameters(), lr=args.lr * 10.0)
 
     scheduler_model = CosineAnnealingLR(opt_model, T_max=args.iterations, eta_min=1e-5)
     scheduler_disc = CosineAnnealingLR(opt_disc, T_max=args.iterations, eta_min=1e-6)
