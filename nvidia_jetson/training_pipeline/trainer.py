@@ -207,7 +207,7 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                 real_seq = torch.cat([real_pixel_seq, mask_seq], dim=1)
 
                 noise_decay_iters = args.iterations * 0.75
-                current_sigma = max(0.0, 0.1 * (1.0 - (current_iter / noise_decay_iters)))
+                current_sigma = max(0.0, 0.02 * (1.0 - (current_iter / noise_decay_iters)))
                 discriminator.set_std(current_sigma)
 
                 optimizer_disc.zero_grad()
