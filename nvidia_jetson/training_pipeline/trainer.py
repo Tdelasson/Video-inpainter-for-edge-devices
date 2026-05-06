@@ -49,6 +49,8 @@ def parse_args():
     parser.add_argument("--w_temp", type=float, required=True)
     parser.add_argument("--w_adv", type=float, required=True)
 
+    parser.add_argument("--save_dir", type=str, default="results", help="Base directory for results")
+
     return parser.parse_args()
 
 def validate(args, model, flow_model, val_loader, val_mask_dataset, criterion, device, save_dir, current_iter):
@@ -324,7 +326,7 @@ def main():
 
     # Save Directory
     master_folder = args.model_name if args.model_name else f"Model_BC{BASE_CHANNELS}_L{NUM_LAYERS}"
-    save_dir = os.path.join("results", master_folder, args.phase_name)
+    save_dir = os.path.join(args.save_dir, args.model_name, args.phase_name)
     os.makedirs(save_dir, exist_ok=True)
     os.makedirs(os.path.join(save_dir, "image_results"), exist_ok=True)
 
