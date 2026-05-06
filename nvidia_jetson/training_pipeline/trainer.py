@@ -383,7 +383,7 @@ def main():
     else:
         print(f"Initializing Synthetic Inpainting Phase: {args.mask_type}")
         dataset = YouTubeVOSDataset(root_dir=os.path.join(os.getcwd(), "training_data", "train"))
-        loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=4, drop_last=True)
+        loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=2, drop_last=True)
 
         # Only load the irregular mask PNGs if we are in "arbitrary" mode
         if args.mask_type == "arbitrary":
