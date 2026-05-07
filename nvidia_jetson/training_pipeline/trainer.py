@@ -237,8 +237,9 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
 
                 if args.w_adv > 0 and current_iter % 2 == 0:
 
-                    real_out = discriminator(real_seq)
-                    fake_out = discriminator(fake_seq.detach())
+
+                    real_out, _ = discriminator(real_seq)
+                    fake_out, _ = discriminator(fake_seq.detach())
 
                     d_real_loss = F.relu(1.0 - real_out["global"]).mean()
                     d_fake_loss_global = F.relu(1.0 + fake_out["global"]).mean()
@@ -285,11 +286,9 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                         fake_seq=fake_seq
                     )
 
-                    _ = discriminator(real_seq)
-                    real_feats = discriminator.discriminator.features.copy()
+                    _, real_feats = discriminator(real_seq)
+                    _, fake_feats = discriminator(fake_seq)
 
-                    _ = discriminator(fake_seq)
-                    fake_feats = discriminator.discriminator.features.copy()
 
                     fm_loss = 0.0
                     for k in real_feats:

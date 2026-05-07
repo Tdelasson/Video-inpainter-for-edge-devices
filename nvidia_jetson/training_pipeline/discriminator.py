@@ -101,6 +101,9 @@ class SharedBackbone(nn.Module):
 # =========================================================
 # FULL MULTI-SCALE VIDEO DISCRIMINATOR
 # =========================================================
+# =========================================================
+# FULL MULTI-SCALE VIDEO DISCRIMINATOR
+# =========================================================
 class SpatioTemporalDiscriminator(nn.Module):
     def __init__(self):
         super().__init__()
@@ -140,7 +143,6 @@ class SpatioTemporalDiscriminator(nn.Module):
         rgb = x[:, :3]
         mask = x[:, 3:4]
 
-        # Branches
         feat_rgb = self.backbone(rgb)
         feat_mask = self.mask_branch(mask)
 
@@ -148,23 +150,31 @@ class SpatioTemporalDiscriminator(nn.Module):
         motion = F.pad(motion, (0, 0, 0, 0, 1, 0))
         feat_motion = self.motion_branch(motion)
 
-        # Fusion & Skip
         x_concat = torch.cat([feat_rgb, feat_mask, feat_motion], dim=1)
         x_fused = self.fusion(x_concat)
         x = x_fused + self.skip_proj(x_concat)
 
         b, c, t, h, w = x.shape
-        x_temp = x.permute(2, 0, 3, 4, 1).reshape(t, b * h * w, c)  # (Seq=T, Batch=B*H*W, Emit=C)
+
+        x_temp = x.permute(2, 0, 3, 4, 1).reshape(t, b * h * w, c)
         x_attn = self.temporal_attn(x_temp)
         x = x_attn.reshape(t, b, h, w, c).permute(1, 4, 0, 2, 3)
 
-        self.features["fusion"] = x
+        # store features
+        features = {
+            "fusion": x,
+            "rgb": feat_rgb,
+            "mask": feat_mask,
+            "motion": feat_motion
+        }
 
-        return {
+        output_dict = {
             "global": self.head_global(x),
             "local": self.head_local(x),
             "temporal": self.head_temporal(x)
         }
+
+        return output_dict, features
 
 # =========================================================
 # FEATURE MATCHING LOSS HELPER
