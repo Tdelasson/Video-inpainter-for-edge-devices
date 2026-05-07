@@ -2,6 +2,7 @@ import os
 import cv2
 import numpy as np
 import torch
+import sys
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import CosineAnnealingLR
@@ -120,6 +121,21 @@ def validate(args, model, flow_model, val_loader, val_mask_dataset, criterion, d
     model.train()
     return {k: np.mean(v) for k, v in metrics.items() if len(v) > 0}
 
+class Logger(object):
+    def __init__(self, filename="log.txt"):
+        self.terminal = sys.stdout
+        # 'a' for append so you don't lose logs if Colab restarts
+        self.log = open(filename, "a", encoding="utf-8")
+
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message)
+        self.log.flush()  # <--- This forces it to appear in Drive immediately
+
+    def flush(self):
+        # Needed for Python 3 compatibility
+        self.terminal.flush()
+        self.log.flush()
 
 def train(args, model, flow_model, discriminator, train_loader, val_loader, mask_dataset, val_mask_dataset,
           optimizer_model, optimizer_disc, scheduler_model,
@@ -334,6 +350,10 @@ def main():
     save_dir = os.path.join(args.save_dir, args.model_name, args.phase_name)
     os.makedirs(save_dir, exist_ok=True)
     os.makedirs(os.path.join(save_dir, "image_results"), exist_ok=True)
+
+    log_file_path = os.path.join(save_dir, "training_log.txt")
+    sys.stdout = Logger(log_file_path)
+    sys.stderr = sys.stdout
 
     print(f"Saving this phase to: {save_dir}")
 
