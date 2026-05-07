@@ -20,6 +20,18 @@ class NoisyDiscriminator(nn.Module):
             x = x + torch.randn_like(x) * self.current_std
         return self.discriminator(x)
 
+class TemporalAttentionBlock(nn.Module):
+    def __init__(self, embed_dim=512, num_heads=4):
+        super().__init__()
+        self.norm = nn.LayerNorm(embed_dim)
+        self.attn = nn.MultiheadAttention(embed_dim=embed_dim, num_heads=num_heads)
+
+    def forward(self, x):
+        # x shape: (Seq=T, Batch=B*H*W, Emit=C)
+        x_norm = self.norm(x)
+        x_attn, _ = self.attn(x_norm, x_norm, x_norm)
+        return x + x_attn  # Add residual connection to stabilize gradients
+
 
 # =========================================================
 # ATTENTION MODULE
@@ -116,7 +128,7 @@ class SpatioTemporalDiscriminator(nn.Module):
 
         self.skip_proj = nn.Conv3d(in_channels_fusion, 512, kernel_size=1, stride=(1, 2, 2))
 
-        self.temporal_attn = nn.MultiheadAttention(embed_dim=512, num_heads=4)
+        self.temporal_attn = TemporalAttentionBlock(embed_dim=512, num_heads=4)
 
         self.head_global = nn.utils.spectral_norm(nn.Conv3d(512, 1, 3, padding=1))
         self.head_local = nn.utils.spectral_norm(nn.Conv3d(512, 1, 1))
