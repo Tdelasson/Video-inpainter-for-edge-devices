@@ -231,7 +231,7 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                 gen_stepped = False
 
                 optimizer_disc.zero_grad()
-                if args.w_adv > 0 and current_iter % 1 == 0:
+                if args.w_adv > 0 and current_iter % 2 == 0:
                     real_pred = discriminator(real_seq)
                     # Detach fake_seq to avoid computing gradients for the generator
                     detached_fake_seq = fake_seq.detach()
@@ -254,7 +254,7 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                     d_loss = d_real_loss + d_fake_loss
                     d_loss.backward()
 
-                    torch.nn.utils.clip_grad_norm_(discriminator.discriminator.parameters(), max_norm=1.0)
+                    torch.nn.utils.clip_grad_norm_(discriminator.discriminator.parameters(), max_norm=5.0)
                     optimizer_disc.step()
                     disc_stepped = True
 
@@ -414,7 +414,7 @@ def main():
     flow_model = raft_small(weights=Raft_Small_Weights.DEFAULT).to(device).eval()
 
     opt_model = optim.Adam(model.parameters(), lr=args.lr)
-    opt_disc = optim.Adam(discriminator.parameters(), lr=args.lr * 0.5)
+    opt_disc = optim.Adam(discriminator.parameters(), lr=args.lr * 0.25)
 
     scheduler_model = CosineAnnealingLR(opt_model, T_max=args.iterations, eta_min=1e-5)
     scheduler_disc = CosineAnnealingLR(opt_disc, T_max=args.iterations, eta_min=1e-6)
