@@ -1,6 +1,12 @@
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
-class NoisyDiscriminator(torch.nn.Module):
+
+# =========================================================
+# NOISE REGULARIZATION
+# =========================================================
+class NoisyDiscriminator(nn.Module):
     def __init__(self, discriminator):
         super().__init__()
         self.discriminator = discriminator
@@ -11,35 +17,164 @@ class NoisyDiscriminator(torch.nn.Module):
 
     def forward(self, x):
         if self.current_std > 0:
-            noise = torch.randn_like(x) * self.current_std
-            x = torch.clamp(x + noise, 0.0, 1.0)
+            x = x + torch.randn_like(x) * self.current_std
         return self.discriminator(x)
 
-class SpatioTemporalDiscriminator(torch.nn.Module):
-    def __init__(self, in_channels=3):
+
+# =========================================================
+# ATTENTION MODULE
+# =========================================================
+class ChannelAttention(nn.Module):
+    def __init__(self, channels, reduction=8):
         super().__init__()
-
-        def conv_block(in_f, out_f, kernel_size=(3, 4, 4), stride=(1, 2, 2), padding=(1, 1, 1), normalize=True):
-            layers = [
-                torch.nn.utils.spectral_norm(
-                    torch.nn.Conv3d(in_f, out_f, kernel_size=kernel_size,
-                                    stride=stride, padding=padding)
-                )
-            ]
-            if normalize:
-                layers.append(torch.nn.InstanceNorm3d(out_f, affine=True))
-            layers.append(torch.nn.LeakyReLU(0.2, inplace=True))
-            return torch.nn.Sequential(*layers)
-
-        self.model = torch.nn.Sequential(
-            conv_block(in_channels, 64, normalize=False),
-            conv_block(64, 128),
-            conv_block(128, 256),
-            conv_block(256, 512, stride=1),
-            torch.nn.utils.spectral_norm(
-                torch.nn.Conv3d(512, 1, kernel_size=(3, 4, 4), stride=1, padding=(1, 1, 1))
-            )
+        self.mlp = nn.Sequential(
+            nn.Linear(channels, channels // reduction),
+            nn.ReLU(),
+            nn.Linear(channels // reduction, channels),
+            nn.Sigmoid()
         )
 
     def forward(self, x):
-        return self.model(x)
+        b, c, t, h, w = x.shape
+        y = x.mean(dim=(2,3,4))  # global pooling
+        y = self.mlp(y).view(b, c, 1, 1, 1)
+        return x * y
+
+
+# =========================================================
+# RESIDUAL 3D BLOCK
+# =========================================================
+class ResBlock3D(nn.Module):
+    def __init__(self, in_f, out_f, stride=(1,2,2)):
+        super().__init__()
+
+        self.conv1 = nn.utils.spectral_norm(
+            nn.Conv3d(in_f, out_f, 3, stride=stride, padding=1)
+        )
+        self.conv2 = nn.utils.spectral_norm(
+            nn.Conv3d(out_f, out_f, 3, padding=1)
+        )
+
+        self.skip = nn.Conv3d(in_f, out_f, 1, stride=stride) if in_f != out_f else nn.Identity()
+        self.act = nn.LeakyReLU(0.2, inplace=True)
+
+    def forward(self, x):
+        residual = self.skip(x)
+        x = self.act(self.conv1(x))
+        x = self.conv2(x)
+        return self.act(x + residual)
+
+
+# =========================================================
+# SHARED BACKBONE (multi-branch feature extractor)
+# =========================================================
+class SharedBackbone(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+        self.block1 = ResBlock3D(3, 64)
+        self.block2 = ResBlock3D(64, 128)
+        self.block3 = ResBlock3D(128, 256)
+
+        self.attn = ChannelAttention(256)
+
+    def forward(self, x):
+        x = self.block1(x)
+        x = self.block2(x)
+        x = self.block3(x)
+        x = self.attn(x)
+        return x
+
+
+# =========================================================
+# FULL MULTI-SCALE VIDEO DISCRIMINATOR
+# =========================================================
+class SpatioTemporalDiscriminator(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+        # Shared feature extractor
+        self.backbone = SharedBackbone()
+
+        # Mask conditioning branch
+        self.mask_branch = nn.Sequential(
+            ResBlock3D(1, 32),
+            ResBlock3D(32, 64)
+        )
+
+        # Motion branch (explicit temporal signal)
+        self.motion_branch = nn.Sequential(
+            ResBlock3D(3, 64),
+            ResBlock3D(64, 128)
+        )
+
+        # Fusion layer (stabilised concat + residual)
+        self.fusion = nn.Sequential(
+            ResBlock3D(256 + 64 + 128, 512),
+            ResBlock3D(512, 512, stride=(1,1,1))
+        )
+
+        # Multi-scale heads
+        self.head_global = nn.utils.spectral_norm(
+            nn.Conv3d(512, 1, 3, padding=1)
+        )
+
+        self.head_local = nn.utils.spectral_norm(
+            nn.Conv3d(512, 1, 1)
+        )
+
+        self.head_temporal = nn.utils.spectral_norm(
+            nn.Conv3d(512, 1, (3,1,1), padding=(1,0,0))
+        )
+
+        # Feature hooks for feature matching loss
+        self.features = {}
+
+    def forward(self, x):
+        rgb = x[:, :3]
+        mask = x[:, 3:4]
+
+        # -------------------------
+        # backbone appearance
+        # -------------------------
+        feat_rgb = self.backbone(rgb)
+
+        # -------------------------
+        # mask conditioning
+        # -------------------------
+        feat_mask = self.mask_branch(mask)
+
+        # -------------------------
+        # motion modeling (explicit difference)
+        # -------------------------
+        motion = rgb[:, :, 1:] - rgb[:, :, :-1]
+        motion = F.pad(motion, (0,0,0,0,1,0))
+        feat_motion = self.motion_branch(motion)
+
+        # -------------------------
+        # fusion
+        # -------------------------
+        x = torch.cat([feat_rgb, feat_mask, feat_motion], dim=1)
+        x = self.fusion(x)
+
+        # store features for feature matching loss
+        self.features["fusion"] = x
+
+        # -------------------------
+        # multi-scale outputs
+        # -------------------------
+        return {
+            "global": self.head_global(x),
+            "local": self.head_local(x),
+            "temporal": self.head_temporal(x)
+        }
+
+
+# =========================================================
+# FEATURE MATCHING LOSS HELPER
+# =========================================================
+def feature_matching_loss(real_features, fake_features):
+    loss = 0.0
+    for k in real_features:
+        loss += F.l1_loss(real_features[k], fake_features[k])
+    return loss

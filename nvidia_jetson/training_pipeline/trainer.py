@@ -121,6 +121,7 @@ def validate(args, model, flow_model, val_loader, val_mask_dataset, criterion, d
     model.train()
     return {k: np.mean(v) for k, v in metrics.items() if len(v) > 0}
 
+
 class Logger(object):
     def __init__(self, filename="log.txt"):
         self.terminal = sys.stdout
@@ -136,6 +137,7 @@ class Logger(object):
         # Needed for Python 3 compatibility
         self.terminal.flush()
         self.log.flush()
+
 
 def train(args, model, flow_model, discriminator, train_loader, val_loader, mask_dataset, val_mask_dataset,
           optimizer_model, optimizer_disc, scheduler_model,
@@ -215,6 +217,7 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                 fake_frame = output * target_mask + target * (1 - target_mask)
                 seq_frames = [window[:, i] for i in range(window.shape[1] - 1)] + [fake_frame]
 
+                # Stack seq_frames to form the temporal dimension (B, C, T, H, W)
                 fake_pixel_seq = torch.stack(seq_frames, dim=2)
                 mask_seq = masks_window.permute(0, 2, 1, 3, 4)
 
@@ -231,44 +234,43 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                 gen_stepped = False
 
                 optimizer_disc.zero_grad()
-                if args.w_adv > 0 and current_iter % 2 == 0:
-                    real_pred = discriminator(real_seq)
-                    # Detach fake_seq to avoid computing gradients for the generator
-                    detached_fake_seq = fake_seq.detach()
-                    d_fake_pred = discriminator(detached_fake_seq)
 
-                    # Downsample the mask to match the discriminator's spatial/temporal output dimensions
-                    downsampled_mask = F.interpolate(
-                        mask_seq,
-                        size=real_pred.shape[2:],
-                        mode='trilinear',
-                        align_corners=False
+                if args.w_adv > 0 and current_iter % 2 == 0:
+
+                    real_out = discriminator(real_seq)
+                    fake_out = discriminator(fake_seq.detach())
+
+                    d_real_loss = F.relu(1.0 - real_out["global"]).mean()
+                    d_fake_loss_global = F.relu(1.0 + fake_out["global"]).mean()
+                    d_fake_loss_local = F.relu(1.0 + fake_out["local"]).mean()
+                    d_fake_loss_temp = F.relu(1.0 + fake_out["temporal"]).mean()
+
+                    d_loss = d_real_loss + 0.5 * (
+                            d_fake_loss_global +
+                            d_fake_loss_local +
+                            d_fake_loss_temp
                     )
 
-                    # Hinge Loss for Discriminator:
-                    # Real should be >= 1, Fake should be <= -1
-                    d_real_loss = F.relu(1.0 - real_pred).mul(downsampled_mask).sum() / (downsampled_mask.sum() + 1e-8)
-                    d_fake_loss = F.relu(1.0 + d_fake_pred).mul(downsampled_mask).sum() / (
-                                downsampled_mask.sum() + 1e-8)
-
-                    d_loss = d_real_loss + d_fake_loss
                     d_loss.backward()
 
-                    torch.nn.utils.clip_grad_norm_(discriminator.discriminator.parameters(), max_norm=5.0)
+                    torch.nn.utils.clip_grad_norm_(
+                        discriminator.parameters(),
+                        max_norm=5.0
+                    )
+
                     optimizer_disc.step()
                     disc_stepped = True
 
                     if current_iter % 100 == 0:
                         total_disc_grad = torch.norm(torch.stack([p.grad.norm(2) for p in discriminator.parameters()
-                                                                  if p.grad is not None]),2)
+                                                                  if p.grad is not None]), 2)
                         print(
                             f"Disc grad norm: {total_disc_grad:.6f} | "
                             f"Noise Std: {current_sigma:.4f} | "
                             f"D_Loss: {d_loss.item():.4f} | "
-                            f"Real Score: {real_pred.mean().item():.4f} | "
-                            f"Fake Score: {d_fake_pred.mean().item():.4f}"
+                            f"Real Score: {real_out['global'].mean().item():.4f} | "
+                            f"Fake Score: {fake_out['global'].mean().item():.4f}"
                         )
-
                 if current_iter >= 500:
                     optimizer_model.zero_grad()
 
@@ -282,6 +284,20 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                         discriminator=discriminator,
                         fake_seq=fake_seq
                     )
+
+                    _ = discriminator(real_seq)
+                    real_feats = discriminator.discriminator.features.copy()
+
+                    _ = discriminator(fake_seq)
+                    fake_feats = discriminator.discriminator.features.copy()
+
+                    fm_loss = 0.0
+                    for k in real_feats:
+                        fm_loss += F.l1_loss(fake_feats[k], real_feats[k].detach())
+
+                    fm_loss = fm_loss * 10.0
+
+                    total_loss = total_loss + fm_loss
 
                     total_loss.backward()
 
@@ -396,7 +412,7 @@ def main():
     model = Viper(in_channels=in_channels, base_channels=BASE_CHANNELS, num_layers=NUM_LAYERS).to(device)
 
     # Initialize with 4 input channels instead of 3 (RGB + Mask)
-    base_discriminator = SpatioTemporalDiscriminator(in_channels=4).to(device)
+    base_discriminator = SpatioTemporalDiscriminator().to(device)
     discriminator = NoisyDiscriminator(base_discriminator)
 
     if args.resume_from:
@@ -414,7 +430,7 @@ def main():
     flow_model = raft_small(weights=Raft_Small_Weights.DEFAULT).to(device).eval()
 
     opt_model = optim.Adam(model.parameters(), lr=args.lr)
-    opt_disc = optim.Adam(discriminator.parameters(), lr=args.lr * 0.25)
+    opt_disc = optim.Adam(discriminator.parameters(), lr=args.lr * 4.0)
 
     scheduler_model = CosineAnnealingLR(opt_model, T_max=args.iterations, eta_min=1e-5)
     scheduler_disc = CosineAnnealingLR(opt_disc, T_max=args.iterations, eta_min=1e-6)
