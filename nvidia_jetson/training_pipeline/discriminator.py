@@ -155,7 +155,7 @@ class SpatioTemporalDiscriminator(nn.Module):
 
         b, c, t, h, w = x.shape
         x_temp = x.permute(2, 0, 3, 4, 1).reshape(t, b * h * w, c)  # (Seq=T, Batch=B*H*W, Emit=C)
-        x_attn, _ = self.temporal_attn(x_temp, x_temp, x_temp)
+        x_attn = self.temporal_attn(x_temp)
         x = x_attn.reshape(t, b, h, w, c).permute(1, 4, 0, 2, 3)
 
         self.features["fusion"] = x
