@@ -1,6 +1,8 @@
 import torch
+import torch.nn.functional as F
 from torchvision.models import vgg16, VGG16_Weights
 from training_pipeline.warp import warp
+
 
 class InpaintingLoss(torch.nn.Module):
     def __init__(self, pixel_m_w, pixel_f_w, perceptual_w, style_w, temporal_w, adv_w):
@@ -28,9 +30,6 @@ class InpaintingLoss(torch.nn.Module):
         self.register_buffer('mean', torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1))
         self.register_buffer('std', torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1))
 
-        self.adv_criterion = torch.nn.MSELoss()
-
-
     def normalize(self, x):
         return (x - self.mean) / self.std
 
@@ -41,7 +40,7 @@ class InpaintingLoss(torch.nn.Module):
         return gram / (C * H * W)
 
     def forward(self, output, target, mask, prev_output_gt=None,
-            prev_output_model=None, flow=None, discriminator=None, fake_seq=None):
+                prev_output_model=None, flow=None, discriminator=None, fake_seq=None):
         if mask.shape[1] != output.shape[1]:
             mask = mask.expand_as(output)
 
@@ -74,26 +73,37 @@ class InpaintingLoss(torch.nn.Module):
                 # Test optical flow on the Ground Truth
                 warped_gt = warp(prev_output_gt, flow)
 
-                # 2. Calculate flow error (L1 difference between warped GT and actual GT)
-                # We average across the color channels to get a single spatial map
+                # Calculate flow error (L1 difference between warped GT and actual GT)
                 flow_error = torch.abs(target - warped_gt).mean(dim=1, keepdim=True)
 
-                # 3. Create a confidence mask.
-                # If error is 0, confidence is 1. If error is high, confidence drops toward 0.
-                # The multiplier (e.g., 10.0) controls how strict we are.
+                # Create a confidence mask.
                 flow_confidence = torch.exp(-10.0 * flow_error)
 
-            # 4. Apply temporal loss ONLY to the masked area, and ONLY where flow is reliable.
+            # Apply temporal loss ONLY to the masked area, and ONLY where flow is reliable.
             temp_loss = self.l1(
                 output * mask * flow_confidence,
                 warped_model * mask * flow_confidence
             ) * self.temporal_w
 
-        # Adversarial Loss
+        # Adversarial Loss (Masked MSE)
         adv_loss = torch.tensor(0.0, device=output.device)
         if discriminator is not None and fake_seq is not None:
             g_fake_pred = discriminator(fake_seq)
-            adv_loss = self.adv_criterion(g_fake_pred, torch.ones_like(g_fake_pred)) * self.adv_w
+
+            # The mask sequence is the 4th channel (index 3) of fake_seq
+            mask_seq = fake_seq[:, 3:4, ...]
+
+            downsampled_mask = F.interpolate(
+                mask_seq,
+                size=g_fake_pred.shape[2:],
+                mode='trilinear',
+                align_corners=False
+            )
+
+            # Generator targets 1.0 (real)
+            diff_fake = (g_fake_pred - 1.0) ** 2
+            adv_loss = (diff_fake * downsampled_mask).sum() / (downsampled_mask.sum() + 1e-8)
+            adv_loss = adv_loss * self.adv_w
 
         total_loss = l1_mask + l1_frame + perceptual_loss + style_loss + temp_loss + adv_loss
 

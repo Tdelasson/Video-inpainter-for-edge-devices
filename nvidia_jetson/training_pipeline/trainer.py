@@ -7,6 +7,7 @@ from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from training_pipeline.config import *
 from training_pipeline.warp import warp
+import torch.nn.functional as F
 
 # Pipeline Imports
 from training_pipeline.dataset import *
@@ -213,10 +214,23 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                 optimizer_disc.zero_grad()
                 if args.w_adv > 0 and current_iter % 1 == 0:
                     real_pred = discriminator(real_seq)
-                    d_real_loss = adversarial_criterion(real_pred, torch.ones_like(real_pred))
-
                     d_fake_pred = discriminator(fake_seq.detach())
-                    d_fake_loss = adversarial_criterion(d_fake_pred, torch.zeros_like(d_fake_pred))
+
+                    # Downsample the mask to match the discriminator's spatial/temporal output dimensions
+                    downsampled_mask = F.interpolate(
+                        mask_seq,
+                        size=real_pred.shape[2:],
+                        mode='trilinear',
+                        align_corners=False
+                    )
+
+                    # Calculate Masked MSE for Real (Target = 1.0)
+                    diff_real = (real_pred - 1.0) ** 2
+                    d_real_loss = (diff_real * downsampled_mask).sum() / (downsampled_mask.sum() + 1e-8)
+
+                    # Calculate Masked MSE for Fake (Target = 0.0)
+                    diff_fake = (d_fake_pred - 0.0) ** 2
+                    d_fake_loss = (diff_fake * downsampled_mask).sum() / (downsampled_mask.sum() + 1e-8)
 
                     d_loss = (d_real_loss + d_fake_loss) * 0.5
                     d_loss.backward()
