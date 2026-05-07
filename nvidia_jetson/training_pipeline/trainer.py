@@ -243,7 +243,12 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                                               for p in discriminator.discriminator.parameters()
                                               if p.grad is not None)
                         print(
-                            f"Disc grad norm: {total_disc_grad:.6f} | Noise Std: {current_sigma:.4f} | D_Loss: {d_loss.item():.4f}")
+                            f"Disc grad norm: {total_disc_grad:.6f} | "
+                            f"Noise Std: {current_sigma:.4f} | "
+                            f"D_Loss: {d_loss.item():.4f} | "
+                            f"Real Score: {real_pred.mean().item():.4f} | "
+                            f"Fake Score: {d_fake_pred.mean().item():.4f}"
+                        )
 
                 if args.w_adv == 0 or current_iter % 5 == 0:
                     optimizer_model.zero_grad()
