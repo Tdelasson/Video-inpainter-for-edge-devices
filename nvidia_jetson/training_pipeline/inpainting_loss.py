@@ -102,7 +102,7 @@ class InpaintingLoss(torch.nn.Module):
 
             # Generator Hinge formulation is the same as WGAN (-D(fake))
             # Generator wants fake scores to be as high as possible
-            adv_loss = (-g_fake_pred * downsampled_mask).sum() / (downsampled_mask.sum() + 1e-8)
+            adv_loss = F.relu(1.0 - g_fake_pred).mul(downsampled_mask).sum() / (downsampled_mask.sum() + 1e-8)
             adv_loss = adv_loss * self.adv_w
 
         total_loss = l1_mask + l1_frame + perceptual_loss + style_loss + temp_loss + adv_loss
