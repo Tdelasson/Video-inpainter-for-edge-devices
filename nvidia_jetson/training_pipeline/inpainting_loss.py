@@ -85,24 +85,24 @@ class InpaintingLoss(torch.nn.Module):
                 warped_model * mask * flow_confidence
             ) * self.temporal_w
 
-            # Adversarial Loss (Masked WGAN)
-            adv_loss = torch.tensor(0.0, device=output.device)
-            if discriminator is not None and fake_seq is not None:
-                g_fake_pred = discriminator(fake_seq)
+        # Adversarial Loss (Masked WGAN)
+        adv_loss = torch.tensor(0.0, device=output.device)
+        if discriminator is not None and fake_seq is not None:
+            g_fake_pred = discriminator(fake_seq)
 
-                # The mask sequence is the 4th channel (index 3) of fake_seq
-                mask_seq = fake_seq[:, 3:4, ...]
+            # The mask sequence is the 4th channel (index 3) of fake_seq
+            mask_seq = fake_seq[:, 3:4, ...]
 
-                downsampled_mask = F.interpolate(
-                    mask_seq,
-                    size=g_fake_pred.shape[2:],
-                    mode='trilinear',
-                    align_corners=False
-                )
+            downsampled_mask = F.interpolate(
+                mask_seq,
+                size=g_fake_pred.shape[2:],
+                mode='trilinear',
+                align_corners=False
+            )
 
-                # In WGAN, the Generator wants to maximize D(fake), which means minimizing -D(fake)
-                adv_loss = (-g_fake_pred * downsampled_mask).sum() / (downsampled_mask.sum() + 1e-8)
-                adv_loss = adv_loss * self.adv_w
+            # In WGAN, the Generator wants to maximize D(fake), which means minimizing -D(fake)
+            adv_loss = (-g_fake_pred * downsampled_mask).sum() / (downsampled_mask.sum() + 1e-8)
+            adv_loss = adv_loss * self.adv_w
 
         total_loss = l1_mask + l1_frame + perceptual_loss + style_loss + temp_loss + adv_loss
 
