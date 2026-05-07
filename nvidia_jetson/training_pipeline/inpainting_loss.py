@@ -89,7 +89,7 @@ class InpaintingLoss(torch.nn.Module):
         adv_loss = torch.tensor(0.0, device=output.device)
         if discriminator is not None and fake_seq is not None:
             # Use the wrapper directly to include the noise regularization
-            g_fake_pred_dict = discriminator(fake_seq)
+            g_fake_pred_dict, _ = discriminator(fake_seq)
             g_fake_pred = g_fake_pred_dict["global"]  # Extract the global prediction tensor
 
             # The mask sequence is the 4th channel (index 3) of fake_seq
