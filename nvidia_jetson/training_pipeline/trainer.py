@@ -227,6 +227,9 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                 current_sigma = max(0.0, 0.00 * (1.0 - (current_iter / noise_decay_iters)))
                 discriminator.set_std(current_sigma)
 
+                disc_stepped = False
+                gen_stepped = False
+
                 optimizer_disc.zero_grad()
                 if args.w_adv > 0 and current_iter % 1 == 0:
                     real_pred = discriminator(real_seq)
@@ -251,13 +254,13 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                     d_loss = d_real_loss + d_fake_loss
                     d_loss.backward()
 
-                    torch.nn.utils.clip_grad_norm_(discriminator.discriminator.parameters(), max_norm=5.0)
+                    torch.nn.utils.clip_grad_norm_(discriminator.discriminator.parameters(), max_norm=1.0)
                     optimizer_disc.step()
+                    disc_stepped = True
 
                     if current_iter % 100 == 0:
-                        total_disc_grad = sum(p.grad.abs().sum().item()
-                                              for p in discriminator.discriminator.parameters()
-                                              if p.grad is not None)
+                        total_disc_grad = torch.norm(torch.stack([p.grad.norm(2) for p in discriminator.parameters()
+                                                                  if p.grad is not None]),2)
                         print(
                             f"Disc grad norm: {total_disc_grad:.6f} | "
                             f"Noise Std: {current_sigma:.4f} | "
@@ -266,25 +269,57 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                             f"Fake Score: {d_fake_pred.mean().item():.4f}"
                         )
 
-                if args.w_adv == 0 or current_iter % 5 == 0:
+                if current_iter >= 500:
                     optimizer_model.zero_grad()
 
-                total_loss, l1_m, l1_f, perc_v, style_v, temp_v, adv = criterion(
-                    output=output, target=target, mask=target_mask,
-                    prev_output_gt=prev_output_gt,
-                    prev_output_model=prev_output_model,
-                    flow=flow,
-                    discriminator=discriminator, fake_seq=fake_seq
-                )
+                    total_loss, l1_m, l1_f, perc_v, style_v, temp_v, adv = criterion(
+                        output=output,
+                        target=target,
+                        mask=target_mask,
+                        prev_output_gt=prev_output_gt,
+                        prev_output_model=prev_output_model,
+                        flow=flow,
+                        discriminator=discriminator,
+                        fake_seq=fake_seq
+                    )
 
-                if current_iter >= 500:
                     total_loss.backward()
 
-                    if args.w_adv == 0 or current_iter % 3 == 0:
-                        optimizer_model.step()
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
 
-                scheduler_model.step()
-                scheduler_disc.step()
+                    optimizer_model.step()
+                    gen_stepped = True
+
+                    if current_iter % 100 == 0:
+                        total_gen_grad = torch.norm(
+                            torch.stack([
+                                p.grad.norm(2)
+                                for p in model.parameters()
+                                if p.grad is not None
+                            ]),
+                            2
+                        )
+
+                        print(f"Gen grad norm: {total_gen_grad:.6f}")
+
+                else:
+                    with torch.no_grad():
+                        total_loss, l1_m, l1_f, perc_v, style_v, temp_v, adv = criterion(
+                            output=output,
+                            target=target,
+                            mask=target_mask,
+                            prev_output_gt=prev_output_gt,
+                            prev_output_model=prev_output_model,
+                            flow=flow,
+                            discriminator=discriminator,
+                            fake_seq=fake_seq
+                        )
+
+                if gen_stepped:
+                    scheduler_model.step()
+
+                if disc_stepped:
+                    scheduler_disc.step()
 
                 metrics_history["total"].append(total_loss.item())
                 metrics_history["mask"].append(l1_m.item())
@@ -379,7 +414,7 @@ def main():
     flow_model = raft_small(weights=Raft_Small_Weights.DEFAULT).to(device).eval()
 
     opt_model = optim.Adam(model.parameters(), lr=args.lr)
-    opt_disc = optim.Adam(discriminator.parameters(), lr=args.lr * 4)
+    opt_disc = optim.Adam(discriminator.parameters(), lr=args.lr * 0.5)
 
     scheduler_model = CosineAnnealingLR(opt_model, T_max=args.iterations, eta_min=1e-5)
     scheduler_disc = CosineAnnealingLR(opt_disc, T_max=args.iterations, eta_min=1e-6)
