@@ -98,13 +98,15 @@ class SpatioTemporalDiscriminator(nn.Module):
 
         # Mask conditioning branch
         self.mask_branch = nn.Sequential(
-            ResBlock3D(1, 32),
+            ResBlock3D(1, 16),
+            ResBlock3D(16, 32),
             ResBlock3D(32, 64)
         )
 
         # Motion branch (explicit temporal signal)
         self.motion_branch = nn.Sequential(
-            ResBlock3D(3, 64),
+            ResBlock3D(3, 32),
+            ResBlock3D(32, 64),
             ResBlock3D(64, 128)
         )
 
