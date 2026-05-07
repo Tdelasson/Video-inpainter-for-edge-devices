@@ -12,6 +12,7 @@ import torch
 sys.path.insert(0, ".")
 
 from Baselines.fuseformer_om_adapter import FuseFormerOMAdapter
+from Baselines.e2fgvi_adapter import E2FGVIAdapter
 from Baselines.constant_fill_adapter import ConstantFillAdapter
 from Baselines.opencv_inpaint_adapter import OpenCVInpaintAdapter
 from Baselines.propainter_adapter import ProPainterAdapter
@@ -23,6 +24,13 @@ from viper_adapter import ViperAdapter
 REPO_ROOT = Path(__file__).resolve().parent
 DEFAULT_RESULTS_DIR = REPO_ROOT / "Results"
 DEFAULT_FUSEFORMER_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/OnlineInpainting/fuseformer.pth").resolve()
+DEFAULT_E2FGVI_BASE_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/OnlineInpainting/E2FGVI-CVPR22.pth").resolve()
+DEFAULT_E2FGVI_HQ_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/OnlineInpainting/E2FGVI-HQ-CVPR22.pth").resolve()
+DEFAULT_E2FGVI_WEIGHTS_PATH = (
+    DEFAULT_E2FGVI_BASE_WEIGHTS_PATH
+    if DEFAULT_E2FGVI_BASE_WEIGHTS_PATH.exists()
+    else DEFAULT_E2FGVI_HQ_WEIGHTS_PATH
+)
 DEFAULT_PROPAINTER_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/ProPainter/ProPainter.pth").resolve()
 DEFAULT_PROPAINTER_RAFT_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/ProPainter/raft-things.pth").resolve()
 DEFAULT_PROPAINTER_FLOW_WEIGHTS_PATH = (
@@ -53,7 +61,7 @@ def parse_args() -> argparse.Namespace:
         "--model",
         type=str,
         default="fuseformer_om",
-        choices=["fuseformer_om", "propainter", "vinet", "viper", "opencv_inpaint", "constant_fill"],
+        choices=["fuseformer_om", "e2fgvi", "propainter", "vinet", "viper", "opencv_inpaint", "constant_fill"],
         help="Model adapter to run",
     )
     parser.add_argument(
@@ -164,6 +172,15 @@ def _build_adapter(args: argparse.Namespace, device: str):
     if model_key == "fuseformer_om":
         weights_path = args.weights_path or DEFAULT_FUSEFORMER_WEIGHTS_PATH
         adapter = FuseFormerOMAdapter(
+            weights_path=str(weights_path),
+            device=device,
+            fp16=args.fp16,
+        )
+        return adapter, adapter.model_h, adapter.model_w
+
+    if model_key == "e2fgvi":
+        weights_path = args.weights_path or DEFAULT_E2FGVI_WEIGHTS_PATH
+        adapter = E2FGVIAdapter(
             weights_path=str(weights_path),
             device=device,
             fp16=args.fp16,
