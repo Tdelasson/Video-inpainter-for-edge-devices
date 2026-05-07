@@ -226,35 +226,13 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                         align_corners=False
                     )
 
-                    # Calculate Masked WGAN Loss for Discriminator: D(fake) - D(real)
-                    d_real_loss = -(real_pred * downsampled_mask).sum() / (downsampled_mask.sum() + 1e-8)
-                    d_fake_loss = (d_fake_pred * downsampled_mask).sum() / (downsampled_mask.sum() + 1e-8)
+                    # Hinge Loss for Discriminator:
+                    # Real should be >= 1, Fake should be <= -1
+                    d_real_loss = F.relu(1.0 - real_pred).mul(downsampled_mask).sum() / (downsampled_mask.sum() + 1e-8)
+                    d_fake_loss = F.relu(1.0 + d_fake_pred).mul(downsampled_mask).sum() / (
+                                downsampled_mask.sum() + 1e-8)
 
-                    # Generate random epsilon for interpolation
-                    epsilon = torch.rand(real_seq.size(0), 1, 1, 1, 1, device=device)
-                    interpolated = (epsilon * real_seq + (1 - epsilon) * detached_fake_seq).requires_grad_(True)
-
-                    # Pass interpolations through discriminator
-                    d_interpolated = discriminator(interpolated)
-
-                    # Calculate gradients of probabilities with respect to inputs
-                    fake_grad_outputs = torch.ones_like(d_interpolated, device=device)
-                    gradients = torch.autograd.grad(
-                        outputs=d_interpolated,
-                        inputs=interpolated,
-                        grad_outputs=fake_grad_outputs,
-                        create_graph=True,
-                        retain_graph=True,
-                        only_inputs=True
-                    )[0]
-
-                    # Flatten gradients and calculate the norm and penalty
-                    gradients = gradients.view(gradients.size(0), -1)
-                    gradient_penalty = ((gradients.norm(2, dim=1) - 1.0) ** 2).mean()
-
-                    # Total Discriminator Loss (WGAN + GP)
-                    lambda_gp = 10.0
-                    d_loss = d_real_loss + d_fake_loss + lambda_gp * gradient_penalty
+                    d_loss = d_real_loss + d_fake_loss
                     d_loss.backward()
 
                     torch.nn.utils.clip_grad_norm_(discriminator.discriminator.parameters(), max_norm=5.0)
@@ -265,7 +243,7 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                                               for p in discriminator.discriminator.parameters()
                                               if p.grad is not None)
                         print(
-                            f"Disc grad norm: {total_disc_grad:.6f} | Noise Std: {current_sigma:.4f} | GP: {gradient_penalty.item():.4f}")
+                            f"Disc grad norm: {total_disc_grad:.6f} | Noise Std: {current_sigma:.4f} | D_Loss: {d_loss.item():.4f}")
 
                 if args.w_adv == 0 or current_iter % 5 == 0:
                     optimizer_model.zero_grad()
