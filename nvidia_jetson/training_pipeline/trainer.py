@@ -235,9 +235,7 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
 
                 optimizer_disc.zero_grad()
 
-                if args.w_adv > 0 and current_iter % 2 == 0:
-
-
+                if args.w_adv > 0 and current_iter % 1 == 0:
                     real_out, _ = discriminator(real_seq)
                     fake_out, _ = discriminator(fake_seq.detach())
 
@@ -275,7 +273,7 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                         print(real_out["global"].mean(), fake_out["global"].mean())
                         print(real_out["global"].std(), fake_out["global"].std())
 
-                if current_iter >= 500:
+                if current_iter >= 5000:
                     optimizer_model.zero_grad()
 
                     total_loss, l1_m, l1_f, perc_v, style_v, temp_v, adv = criterion(
