@@ -214,7 +214,7 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                     hidden_state = hidden_state.detach()
 
                 # Generate Fake Sequence and Mask Condition
-                fake_frame = output * target_mask + target * (1 - target_mask)
+                fake_frame = output
                 seq_frames = [window[:, i] for i in range(window.shape[1] - 1)] + [fake_frame]
 
                 # Stack seq_frames to form the temporal dimension (B, C, T, H, W)
