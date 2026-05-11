@@ -276,7 +276,7 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                             f"Fake Score: {fake_pred.mean().item():.4f}"
                         )
 
-                if current_iter > 50000:
+                if current_iter > 0:
                     optimizer_model.zero_grad()
 
                     total_loss, l1_m, l1_f, perc_v, style_v, temp_v, adv = criterion(
@@ -438,7 +438,7 @@ def main():
     flow_model = raft_small(weights=Raft_Small_Weights.DEFAULT).to(device).eval()
 
     opt_model = optim.Adam(model.parameters(), lr=args.lr)
-    opt_disc = optim.Adam(discriminator.parameters(), lr=args.lr * 10.0)
+    opt_disc = optim.Adam(discriminator.parameters(), lr=args.lr * 1.0)
 
     scheduler_model = CosineAnnealingLR(opt_model, T_max=args.iterations, eta_min=1e-5)
     scheduler_disc = CosineAnnealingLR(opt_disc, T_max=args.iterations, eta_min=1e-6)
