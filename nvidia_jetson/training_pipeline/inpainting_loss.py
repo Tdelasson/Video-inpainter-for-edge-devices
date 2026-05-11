@@ -91,12 +91,12 @@ class InpaintingLoss(torch.nn.Module):
             g_fake_pred_dict, _ = discriminator(fake_seq)
 
             # Isolate the final frame
-            g_fake_pred = g_fake_pred_dict["global"][:, :, -1:, ...]
-            mask_seq = fake_seq[:, 3:4, -1:, ...]
+            g_fake_pred = g_fake_pred_dict["global"][:, :, -1, ...]
+            mask_seq = fake_seq[:, 3:4, -1, ...]
 
             downsampled_mask = F.interpolate(
                 mask_seq,
-                size=g_fake_pred.shape[3:],
+                size=g_fake_pred.shape[2:],
                 mode='bilinear',
                 align_corners=False
             )
