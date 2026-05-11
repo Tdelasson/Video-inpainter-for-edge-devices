@@ -86,21 +86,23 @@ class InpaintingLoss(torch.nn.Module):
             ) * self.temporal_w
 
         # Adversarial Loss (Masked Hinge)
+
         adv_loss = torch.tensor(0.0, device=output.device)
         if discriminator is not None and fake_seq is not None:
-            g_fake_pred_dict, _ = discriminator(fake_seq)
+            # PatchGAN directly outputs the prediction grid
+            g_fake_pred = discriminator(fake_seq)
 
-            # Isolate the final frame
-            g_fake_pred = g_fake_pred_dict["global"][:, :, -1, ...]
-            mask_seq = fake_seq[:, 3:4, -1, ...]
+            mask_seq = fake_seq[:, 3:4, ...]  # Shape: (B, 1, T, H, W)
 
+            # Interpolate mask to match the discriminator's output patch grid mathematically
             downsampled_mask = F.interpolate(
                 mask_seq,
                 size=g_fake_pred.shape[2:],
-                mode='bilinear',
+                mode='trilinear',
                 align_corners=False
             )
 
+            # Generator wants fake to be evaluated as real (> 0)
             masked_pred = -g_fake_pred * downsampled_mask
             adv_loss = masked_pred.sum() / (downsampled_mask.sum() + 1e-8)
             adv_loss = adv_loss * self.adv_w

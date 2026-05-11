@@ -22,7 +22,7 @@ from training_pipeline.mask_generator import (
 )
 from training_pipeline.inpainting_loss import InpaintingLoss
 from torchvision.models.optical_flow import raft_small, Raft_Small_Weights
-from training_pipeline.discriminator import SpatioTemporalDiscriminator, NoisyDiscriminator
+from training_pipeline.discriminator import VideoPatchGAN, NoisyDiscriminator
 import argparse
 import json
 
@@ -236,37 +236,24 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                 optimizer_disc.zero_grad()
 
                 if args.w_adv > 0 and current_iter % 1 == 0:
-                    real_out, _ = discriminator(real_seq)
-                    fake_out, _ = discriminator(fake_seq.detach())
+                    real_pred = discriminator(real_seq)
+                    fake_pred = discriminator(fake_seq.detach())
 
-                    real_global_pred = real_out["global"][:, :, -1, ...]
-                    fake_global_pred = fake_out["global"][:, :, -1, ...]
-                    fake_local_pred = fake_out["local"][:, :, -1, ...]
-                    fake_temp_pred = fake_out["temporal"][:, :, -1, ...]
+                    mask_seq = real_seq[:, 3:4, ...]
 
-                    mask_last = mask_seq[:, :, -1, ...]
+                    # Align mask with the spatio-temporal patch grid
                     downsampled_mask = F.interpolate(
-                        mask_last,
-                        size=real_global_pred.shape[2:],
-                        mode='bilinear',
+                        mask_seq,
+                        size=real_pred.shape[2:],
+                        mode='trilinear',
                         align_corners=False
                     )
 
-                    # Calculate masked losses
-                    d_real_loss = (F.relu(1.0 - real_global_pred) * downsampled_mask).sum() / (
-                                downsampled_mask.sum() + 1e-8)
-                    d_fake_loss_global = (F.relu(1.0 + fake_global_pred) * downsampled_mask).sum() / (
-                                downsampled_mask.sum() + 1e-8)
-                    d_fake_loss_local = (F.relu(1.0 + fake_local_pred) * downsampled_mask).sum() / (
-                                downsampled_mask.sum() + 1e-8)
-                    d_fake_loss_temp = (F.relu(1.0 + fake_temp_pred) * downsampled_mask).sum() / (
-                                downsampled_mask.sum() + 1e-8)
+                    # Hinge Loss for Discriminator applied over patches
+                    d_real_loss = (F.relu(1.0 - real_pred) * downsampled_mask).sum() / (downsampled_mask.sum() + 1e-8)
+                    d_fake_loss = (F.relu(1.0 + fake_pred) * downsampled_mask).sum() / (downsampled_mask.sum() + 1e-8)
 
-                    d_loss = d_real_loss + 0.5 * (
-                            d_fake_loss_global +
-                            d_fake_loss_local +
-                            d_fake_loss_temp
-                    )
+                    d_loss = d_real_loss + d_fake_loss
 
                     d_loss.backward()
 
@@ -285,11 +272,9 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                             f"Disc grad norm: {total_disc_grad:.6f} | "
                             f"Noise Std: {current_sigma:.4f} | "
                             f"D_Loss: {d_loss.item():.4f} | "
-                            f"Real Score: {real_out['global'].mean().item():.4f} | "
-                            f"Fake Score: {fake_out['global'].mean().item():.4f}"
+                            f"Real Score: {real_pred.mean().item():.4f} | "
+                            f"Fake Score: {fake_pred.mean().item():.4f}"
                         )
-                        print(real_out["global"].mean(), fake_out["global"].mean())
-                        print(real_out["global"].std(), fake_out["global"].std())
 
                 if current_iter >= 5000:
                     optimizer_model.zero_grad()
@@ -430,7 +415,7 @@ def main():
     model = Viper(in_channels=in_channels, base_channels=BASE_CHANNELS, num_layers=NUM_LAYERS).to(device)
 
     # Initialize with 4 input channels instead of 3 (RGB + Mask)
-    base_discriminator = SpatioTemporalDiscriminator().to(device)
+    base_discriminator = VideoPatchGAN(in_channels=4).to(device)
     discriminator = NoisyDiscriminator(base_discriminator)
 
     if args.resume_from:
