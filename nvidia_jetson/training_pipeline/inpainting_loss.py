@@ -88,23 +88,20 @@ class InpaintingLoss(torch.nn.Module):
         # Adversarial Loss (Masked Hinge)
         adv_loss = torch.tensor(0.0, device=output.device)
         if discriminator is not None and fake_seq is not None:
-            # Use the wrapper directly to include the noise regularization
             g_fake_pred_dict, _ = discriminator(fake_seq)
-            g_fake_pred = g_fake_pred_dict["global"]  # Extract the global prediction tensor
 
-            # The mask sequence is the 4th channel (index 3) of fake_seq
-            mask_seq = fake_seq[:, 3:4, ...]
+            # Isolate the final frame
+            g_fake_pred = g_fake_pred_dict["global"][:, :, -1:, ...]
+            mask_seq = fake_seq[:, 3:4, -1:, ...]
 
             downsampled_mask = F.interpolate(
                 mask_seq,
-                size=g_fake_pred.shape[2:],
-                mode='trilinear',
+                size=g_fake_pred.shape[3:],
+                mode='bilinear',
                 align_corners=False
             )
 
-            # Mask the predictions BEFORE reducing to a scalar
             masked_pred = -g_fake_pred * downsampled_mask
-
             adv_loss = masked_pred.sum() / (downsampled_mask.sum() + 1e-8)
             adv_loss = adv_loss * self.adv_w
 

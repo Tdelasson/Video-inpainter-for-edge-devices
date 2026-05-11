@@ -239,10 +239,15 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                     real_out, _ = discriminator(real_seq)
                     fake_out, _ = discriminator(fake_seq.detach())
 
-                    d_real_loss = F.relu(1.0 - real_out["global"]).mean()
-                    d_fake_loss_global = F.relu(1.0 + fake_out["global"]).mean()
-                    d_fake_loss_local = F.relu(1.0 + fake_out["local"]).mean()
-                    d_fake_loss_temp = F.relu(1.0 + fake_out["temporal"]).mean()
+                    real_global_pred = real_out["global"][:, :, -1:, ...]
+                    fake_global_pred = fake_out["global"][:, :, -1:, ...]
+                    fake_local_pred = fake_out["local"][:, :, -1:, ...]
+                    fake_temp_pred = fake_out["temporal"][:, :, -1:, ...]
+
+                    d_real_loss = F.relu(1.0 - real_global_pred).mean()
+                    d_fake_loss_global = F.relu(1.0 + fake_global_pred).mean()
+                    d_fake_loss_local = F.relu(1.0 + fake_local_pred).mean()
+                    d_fake_loss_temp = F.relu(1.0 + fake_temp_pred).mean()
 
                     d_loss = d_real_loss + 0.5 * (
                             d_fake_loss_global +
