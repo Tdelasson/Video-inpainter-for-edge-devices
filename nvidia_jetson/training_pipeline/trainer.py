@@ -292,7 +292,7 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
 
                     total_loss.backward()
 
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0)
 
                     optimizer_model.step()
                     gen_stepped = True
