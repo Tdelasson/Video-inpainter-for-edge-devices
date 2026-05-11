@@ -290,18 +290,6 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                         fake_seq=fake_seq
                     )
 
-                    _, real_feats = discriminator(real_seq)
-                    _, fake_feats = discriminator(fake_seq)
-
-
-                    fm_loss = 0.0
-                    for k in real_feats:
-                        fm_loss += F.l1_loss(fake_feats[k], real_feats[k].detach())
-
-                    fm_loss = fm_loss * 1.0
-
-                    total_loss = total_loss #+ fm_loss
-
                     total_loss.backward()
 
                     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
