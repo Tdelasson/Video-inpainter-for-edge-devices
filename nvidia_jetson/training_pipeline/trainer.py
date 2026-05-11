@@ -244,10 +244,23 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                     fake_local_pred = fake_out["local"][:, :, -1:, ...]
                     fake_temp_pred = fake_out["temporal"][:, :, -1:, ...]
 
-                    d_real_loss = F.relu(1.0 - real_global_pred).mean()
-                    d_fake_loss_global = F.relu(1.0 + fake_global_pred).mean()
-                    d_fake_loss_local = F.relu(1.0 + fake_local_pred).mean()
-                    d_fake_loss_temp = F.relu(1.0 + fake_temp_pred).mean()
+                    mask_last = mask_seq[:, :, -1, ...]
+                    downsampled_mask = F.interpolate(
+                        mask_last,
+                        size=real_global_pred.shape[2:],
+                        mode='bilinear',
+                        align_corners=False
+                    )
+
+                    # Calculate masked losses
+                    d_real_loss = (F.relu(1.0 - real_global_pred) * downsampled_mask).sum() / (
+                                downsampled_mask.sum() + 1e-8)
+                    d_fake_loss_global = (F.relu(1.0 + fake_global_pred) * downsampled_mask).sum() / (
+                                downsampled_mask.sum() + 1e-8)
+                    d_fake_loss_local = (F.relu(1.0 + fake_local_pred) * downsampled_mask).sum() / (
+                                downsampled_mask.sum() + 1e-8)
+                    d_fake_loss_temp = (F.relu(1.0 + fake_temp_pred) * downsampled_mask).sum() / (
+                                downsampled_mask.sum() + 1e-8)
 
                     d_loss = d_real_loss + 0.5 * (
                             d_fake_loss_global +
