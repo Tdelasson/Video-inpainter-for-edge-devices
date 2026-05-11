@@ -239,10 +239,10 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                     real_out, _ = discriminator(real_seq)
                     fake_out, _ = discriminator(fake_seq.detach())
 
-                    real_global_pred = real_out["global"][:, :, -1:, ...]
-                    fake_global_pred = fake_out["global"][:, :, -1:, ...]
-                    fake_local_pred = fake_out["local"][:, :, -1:, ...]
-                    fake_temp_pred = fake_out["temporal"][:, :, -1:, ...]
+                    real_global_pred = real_out["global"][:, :, -1, ...]
+                    fake_global_pred = fake_out["global"][:, :, -1, ...]
+                    fake_local_pred = fake_out["local"][:, :, -1, ...]
+                    fake_temp_pred = fake_out["temporal"][:, :, -1, ...]
 
                     mask_last = mask_seq[:, :, -1, ...]
                     downsampled_mask = F.interpolate(
