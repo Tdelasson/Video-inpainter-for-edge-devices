@@ -276,7 +276,7 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                             f"Fake Score: {fake_pred.mean().item():.4f}"
                         )
 
-                if current_iter >= 5000:
+                if current_iter > 50000:
                     optimizer_model.zero_grad()
 
                     total_loss, l1_m, l1_f, perc_v, style_v, temp_v, adv = criterion(
@@ -369,6 +369,11 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                     save_previews(save_dir, current_iter, composited, target, masked_window)
 
                 current_iter += 1
+
+                if current_iter % 1000 == 0 and current_iter > 0:
+                    torch.save(discriminator.discriminator.state_dict(),
+                               os.path.join(save_dir, f"discriminator_iter_{current_iter}.pth"))
+                    print(f"Discriminator saved at iteration {current_iter}")
 
                 if current_iter % 10000 == 0:
                     torch.save(model.state_dict(),
