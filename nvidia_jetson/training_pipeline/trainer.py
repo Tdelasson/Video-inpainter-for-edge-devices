@@ -65,16 +65,33 @@ def validate(args, model, flow_model, val_loader, val_mask_dataset, criterion, d
             if i >= 100:
                 break
 
-            video_data = data.float().to(device) / 255.0
+            if args.mask_type == "human":
+                video_data = data["video"].float().to(device) / 255.0
+                masks = data["mask"].float().to(device)
+            else:
+                video_data = data.float().to(device) / 255.0
+
             video_data = video_data.permute(0, 1, 4, 2, 3)
             B, T, C, H, W = video_data.shape
 
-            masks = generate_arbitrary_shape_mask(video_data, val_mask_dataset)
+            # Fix: Apply the correct mask generator based on the mask type
+            if args.mask_type != "human":
+                if args.mask_type == "random":
+                    masks = generate_random_square_mask(video_data)
+                elif args.mask_type == "flying":
+                    masks = generate_flying_square_mask(video_data)
+                elif args.mask_type == "arbitrary":
+                    masks = generate_arbitrary_shape_mask(video_data, val_mask_dataset)
+
             masks = random_dilate_and_blur_mask(masks)
             masked_video = video_data * (1.0 - masks)
 
             hidden_state = None
             prev_composited = None
+
+            comps = []
+            tgts = []
+            ins = []
 
             for t in range(0, T - args.seq_len + 1):
                 window = video_data[:, t:t + args.seq_len]
@@ -93,6 +110,11 @@ def validate(args, model, flow_model, val_loader, val_mask_dataset, criterion, d
                     hidden_state = hidden_state.detach()
 
                 composited = output * target_mask + target * (1 - target_mask)
+
+                if i == 0:
+                    comps.append(composited)
+                    tgts.append(target)
+                    ins.append(masked_window)
 
                 total_loss, l1_m, l1_f, _, _, _, _ = criterion(
                     output=output, target=target, mask=target_mask,
@@ -117,21 +139,21 @@ def validate(args, model, flow_model, val_loader, val_mask_dataset, criterion, d
 
                 prev_composited = composited
 
-    save_previews(save_dir, f"val_{current_iter}", composited, target, masked_window)
+            if i == 0 and comps:
+                save_video_previews(save_dir, f"val_{current_iter}", comps, tgts, ins)
+
     model.train()
     return {k: np.mean(v) for k, v in metrics.items() if len(v) > 0}
-
 
 class Logger(object):
     def __init__(self, filename="log.txt"):
         self.terminal = sys.stdout
-        # 'a' for append so you don't lose logs if Colab restarts
         self.log = open(filename, "a", encoding="utf-8")
 
     def write(self, message):
         self.terminal.write(message)
         self.log.write(message)
-        self.log.flush()  # <--- This forces it to appear in Drive immediately
+        self.log.flush()
 
     def flush(self):
         # Needed for Python 3 compatibility
@@ -176,6 +198,7 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
             hidden_state = None
             prev_output_gt = None
             prev_output_model = None
+
             for t in range(0, T - args.seq_len + 1):
                 if current_iter >= args.iterations:
                     break
@@ -354,7 +377,10 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                     )
 
                 if current_iter % 500 == 0:
-                    save_previews(save_dir, current_iter, composited, target, masked_window)
+                    print(f"Running validation at iteration {current_iter}...")
+                    val_metrics = validate(args, model, flow_model, val_loader, val_mask_dataset, criterion, device,
+                                           save_dir, current_iter)
+                    print(f"Validation Metrics: {val_metrics}")
 
                 current_iter += 1
 
@@ -375,18 +401,28 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
     return {k: np.mean(v) for k, v in metrics_history.items()}
 
 
-def save_previews(save_dir, it, comp, tgt, m_win):
-    out_img = (comp[0].detach().cpu().permute(1, 2, 0).numpy() * 255).astype(np.uint8)
-    target_img = (tgt[0].detach().cpu().permute(1, 2, 0).numpy() * 255).astype(np.uint8)
-    input_img = (m_win[0, -1].detach().cpu().permute(1, 2, 0).numpy() * 255).astype(np.uint8)
+def save_video_previews(save_dir, it, comp_list, tgt_list, in_list, fps=10):
+    if not comp_list:
+        return
 
-    cv2.imwrite(os.path.join(save_dir, "image_results", f"iter_{it}_output.png"),
-                cv2.cvtColor(out_img, cv2.COLOR_RGB2BGR))
-    cv2.imwrite(os.path.join(save_dir, "image_results", f"iter_{it}_target.png"),
-                cv2.cvtColor(target_img, cv2.COLOR_RGB2BGR))
-    cv2.imwrite(os.path.join(save_dir, "image_results", f"iter_{it}_input.png"),
-                cv2.cvtColor(input_img, cv2.COLOR_RGB2BGR))
+    frames = []
+    for comp, tgt, m_win in zip(comp_list, tgt_list, in_list):
+        out_img = (comp[0].detach().cpu().permute(1, 2, 0).numpy() * 255).astype(np.uint8)
+        target_img = (tgt[0].detach().cpu().permute(1, 2, 0).numpy() * 255).astype(np.uint8)
+        input_img = (m_win[0, -1].detach().cpu().permute(1, 2, 0).numpy() * 255).astype(np.uint8)
 
+        combined = np.concatenate((input_img, out_img, target_img), axis=1)
+        frames.append(cv2.cvtColor(combined, cv2.COLOR_RGB2BGR))
+
+    height, width, _ = frames[0].shape
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    vid_path = os.path.join(save_dir, "image_results", f"iter_{it}_video.mp4")
+    video = cv2.VideoWriter(vid_path, fourcc, fps, (width, height))
+
+    for frame in frames:
+        video.write(frame)
+
+    video.release()
 
 def main():
     args = parse_args()
@@ -444,18 +480,29 @@ def main():
         mask_ds = HumanMaskDataset(root_dir=os.path.join(os.getcwd(), "training_data", "train"))
         combined_dataset = HumanInpaintingDataset(clean_ds, mask_ds)
         loader = DataLoader(combined_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4, drop_last=True)
+
+        # Validation datasets
+        val_clean_ds = YouTubeVOSDatasetWithoutHumans(root_dir=os.path.join(os.getcwd(), "training_data", "valid"))
+        val_mask_ds = HumanMaskDataset(root_dir=os.path.join(os.getcwd(), "training_data", "valid"))
+        val_combined_dataset = HumanInpaintingDataset(val_clean_ds, val_mask_ds)
+        val_loader = DataLoader(val_combined_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4,
+                                drop_last=True)
     else:
         print(f"Initializing Synthetic Inpainting Phase: {args.mask_type}")
         dataset = YouTubeVOSDataset(root_dir=os.path.join(os.getcwd(), "training_data", "train"))
         loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=2, drop_last=True)
 
+        val_dataset = YouTubeVOSDataset(root_dir=os.path.join(os.getcwd(), "training_data", "valid"))
+        val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=2, drop_last=True)
+
         if args.mask_type == "arbitrary":
             mask_dataset = IrregularMaskDataset(
                 root_dir=os.path.join(os.getcwd(), "training_data", "irregular_mask", "disocclusion_img_mask"))
+            val_mask_dataset = mask_dataset
 
     final_metrics = train(
-        args, model, flow_model, discriminator, loader, None,
-        mask_dataset, None, opt_model, opt_disc,
+        args, model, flow_model, discriminator, loader, val_loader,
+        mask_dataset, val_mask_dataset, opt_model, opt_disc,
         scheduler_model, scheduler_disc, criterion, adv_crit, device, save_dir
     )
 
