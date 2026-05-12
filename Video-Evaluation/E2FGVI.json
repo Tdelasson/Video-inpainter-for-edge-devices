@@ -1,0 +1,15 @@
+{
+  "model": "E2FGVI",
+  "dataset": "DAVIS",
+  "mask_type": "synthetic",
+  "fp16": true,
+  "num_videos": 50,
+  "fps": 5.221,
+  "latency_ms": 195.0668,
+  "peak_memory_mb": 5853.92,
+  "psnr": 34.3002,
+  "ssim": 0.9772,
+  "vfid": 0.4253,
+  "ewarp": 0.001333,
+  "ewarp_x1e2": 0.133
+}

@@ -32,12 +32,12 @@ def _import_inpaint_generator():
     if _BASELINE_DIR not in sys.path:
         sys.path.insert(0, _BASELINE_DIR)
     try:
-        from model.e2fgvi import InpaintGenerator
+        from model.e2fgvi_hq import InpaintGenerator
 
         return InpaintGenerator
     except Exception as exc:
         raise RuntimeError(
-            "Failed to import E2FGVI model from Baselines_Repos/E2FGVI-master. "
+            "Failed to import E2FGVI-HQ model from Baselines_Repos/E2FGVI-master. "
             "Please verify dependencies for E2FGVI are installed."
         ) from exc
 
@@ -227,11 +227,16 @@ def _get_ref_index(
 
 
 class E2FGVIAdapter(BaseVideoInpainter):
-    def __init__(self, weights_path: str, device: str = "cuda", fp16: bool = False):
+    def __init__(
+        self,
+        weights_path: str,
+        device: str = "cuda",
+        fp16: bool = False,
+    ):
         self.device = torch.device(device)
         self.fp16 = fp16 and self.device.type == "cuda"
-        self.model_h = MODEL_H
-        self.model_w = MODEL_W
+        self.model_h = None
+        self.model_w = None
         self.ref_length = REF_LENGTH
         self.num_ref = NUM_REF
         self.neighbor_stride = NEIGHBOR_STRIDE
@@ -239,11 +244,18 @@ class E2FGVIAdapter(BaseVideoInpainter):
         InpaintGenerator = _import_inpaint_generator()
         self.model = InpaintGenerator().to(self.device)
 
-        checkpoint = torch.load(weights_path, map_location=self.device)
+        weights_file = Path(weights_path)
+        if not weights_file.exists():
+            raise FileNotFoundError(
+                f"E2FGVI checkpoint not found: {weights_file}. "
+                "Use the E2FGVI-HQ checkpoint file for this adapter."
+            )
+
+        checkpoint = torch.load(weights_file, map_location=self.device)
         if isinstance(checkpoint, dict) and "state_dict" in checkpoint:
             checkpoint = checkpoint["state_dict"]
         if not isinstance(checkpoint, dict):
-            raise RuntimeError(f"Unsupported E2FGVI checkpoint format: {weights_path}")
+            raise RuntimeError(f"Unsupported E2FGVI checkpoint format: {weights_file}")
 
         target = self.model.state_dict()
         remapped = {}
@@ -254,12 +266,12 @@ class E2FGVIAdapter(BaseVideoInpainter):
 
         missing, unexpected = self.model.load_state_dict(remapped, strict=False)
         if not remapped:
-            raise RuntimeError(f"No compatible E2FGVI parameters were loaded from: {weights_path}")
+            raise RuntimeError(f"No compatible E2FGVI parameters were loaded from: {weights_file}")
 
         loaded_ratio = len(remapped) / max(1, len(target))
         if loaded_ratio < 0.90:
             raise RuntimeError(
-                f"E2FGVI checkpoint compatibility is too low ({loaded_ratio:.1%}). "
+                f"E2FGVI-HQ checkpoint compatibility is too low ({loaded_ratio:.1%}). "
                 f"Missing keys: {len(missing)}, unexpected keys: {len(unexpected)}"
             )
         self.model.eval()
@@ -269,7 +281,7 @@ class E2FGVIAdapter(BaseVideoInpainter):
 
     @property
     def name(self) -> str:
-        return "E2FGVI"
+        return "E2FGVI_HQ"
 
     def inpaint(
         self,
@@ -294,6 +306,8 @@ class E2FGVIAdapter(BaseVideoInpainter):
         masks: list[np.ndarray],
     ) -> tuple[torch.Tensor, torch.Tensor, list[np.ndarray], list[np.ndarray]]:
         kernel = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
+        target_h = self.model_h if self.model_h is not None else frames[0].shape[0]
+        target_w = self.model_w if self.model_w is not None else frames[0].shape[1]
 
         resized_frames = []
         frame_tensors = []
@@ -301,8 +315,8 @@ class E2FGVIAdapter(BaseVideoInpainter):
         binary_masks = []
 
         for frame, mask in zip(frames, masks):
-            frame_resized = cv2.resize(frame, (self.model_w, self.model_h), interpolation=cv2.INTER_LINEAR)
-            mask_resized = cv2.resize(mask, (self.model_w, self.model_h), interpolation=cv2.INTER_NEAREST)
+            frame_resized = cv2.resize(frame, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
+            mask_resized = cv2.resize(mask, (target_w, target_h), interpolation=cv2.INTER_NEAREST)
             mask_bin = (mask_resized > 0).astype(np.uint8)
             mask_bin = cv2.dilate(mask_bin, kernel, iterations=MASK_DILATION)
 
