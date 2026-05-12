@@ -35,7 +35,7 @@ def parse_args():
     parser.add_argument("--resume_from", type=str, default=None, help="Path to checkpoint .pth")
 
     # Architecture/Data Config
-    parser.add_argument("--batch_size", type=int, default=1)
+    parser.add_argument("--batch_size", type=int, default=BATCH_SIZE)
     parser.add_argument("--seq_len", type=int, default=5)
     parser.add_argument("--lr", type=float, default=0.0001)
 
