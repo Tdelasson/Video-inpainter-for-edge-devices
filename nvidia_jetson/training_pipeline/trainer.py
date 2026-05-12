@@ -486,7 +486,7 @@ def main():
         # Validation datasets
         val_clean_ds = YouTubeVOSDatasetWithoutHumans(root_dir=os.path.join(os.getcwd(), "training_data", "valid"))
         val_mask_dataset = HumanMaskDataset(root_dir=os.path.join(os.getcwd(), "training_data", "valid"))
-        val_combined_dataset = HumanInpaintingDataset(val_clean_ds, val_mask_ds)
+        val_combined_dataset = HumanInpaintingDataset(val_clean_ds, val_mask_dataset)
         val_loader = DataLoader(val_combined_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4,
                                 drop_last=True)
     else:
