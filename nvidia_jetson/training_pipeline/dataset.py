@@ -32,14 +32,13 @@ class YouTubeVOSDataset(Dataset):
         if len(all_frames) == 0:
             return self.__getitem__(np.random.randint(0, len(self.video_list)))
 
-        # Slice or pad the frame paths
         num_frames = len(all_frames)
         if num_frames > self.target_seq_len:
             start_idx = np.random.randint(0, num_frames - self.target_seq_len + 1)
             sampled_frames = all_frames[start_idx : start_idx + self.target_seq_len]
         else:
-            padding = [all_frames[-1]] * (self.target_seq_len - num_frames)
-            sampled_frames = all_frames + padding
+            # Loop the video frames
+            sampled_frames = [all_frames[i % num_frames] for i in range(self.target_seq_len)]
 
         rgb_frames = []
         for frame_name in sampled_frames:
@@ -50,7 +49,6 @@ class YouTubeVOSDataset(Dataset):
                 rgb_img = cv2.cvtColor(jpeg_img, cv2.COLOR_BGR2RGB)
                 rgb_frames.append(rgb_img)
 
-        # Fallback if image loading failed
         if len(rgb_frames) < self.target_seq_len:
             return self.__getitem__(np.random.randint(0, len(self.video_list)))
 
@@ -124,8 +122,8 @@ class HumanMaskDataset(Dataset):
             start_idx = np.random.randint(0, num_frames - self.target_seq_len + 1)
             sampled_frames = mask_files[start_idx : start_idx + self.target_seq_len]
         else:
-            padding = [mask_files[-1]] * (self.target_seq_len - num_frames)
-            sampled_frames = mask_files + padding
+            # Loop the mask frames
+            sampled_frames = [mask_files[i % num_frames] for i in range(self.target_seq_len)]
 
         mask_sequence = []
         for frame_name in sampled_frames:
@@ -185,8 +183,8 @@ class YouTubeVOSDatasetWithoutHumans(Dataset):
             start_idx = np.random.randint(0, num_frames - self.target_seq_len + 1)
             sampled_frames = all_frames[start_idx : start_idx + self.target_seq_len]
         else:
-            padding = [all_frames[-1]] * (self.target_seq_len - num_frames)
-            sampled_frames = all_frames + padding
+            # Loop the video frames
+            sampled_frames = [all_frames[i % num_frames] for i in range(self.target_seq_len)]
 
         rgb_frames = []
         for frame_name in sampled_frames:
