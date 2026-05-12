@@ -57,10 +57,27 @@ class TestDataset:
 
         # --- Set up directory paths ---
         self.frames_dir = self.data_root / dataset / self.frames_subdir
+        
+        # Extract resolution suffix from frames_subdir (e.g., "_256_256" from "JPEGImages_256_256")
+        # and apply it to the mask folder name for consistency
+        suffix = ""
+        if "_" in self.frames_subdir:
+            parts = self.frames_subdir.rsplit("_", 2)
+            if len(parts) == 3 and parts[1].isdigit() and parts[2].isdigit():
+                # Extract suffix like "_256_256" or "_432_240"
+                suffix = f"_{parts[1]}_{parts[2]}"
+        
         if mask_type == "synthetic":
-            self.masks_dir = self.data_root / dataset / "SyntheticMasks"
+            masks_name = f"SyntheticMasks{suffix}"
+            masks_name_fallback = "SyntheticMasks"
         else:
-            self.masks_dir = self.data_root / dataset / "RealObjectMasks"
+            masks_name = f"RealObjectMasks{suffix}"
+            masks_name_fallback = "RealObjectMasks"
+        
+        # Try the suffixed mask folder first, fall back to non-suffixed for backward compatibility
+        self.masks_dir = self.data_root / dataset / masks_name
+        if not self.masks_dir.exists() and suffix:
+            self.masks_dir = self.data_root / dataset / masks_name_fallback
 
         # Verify the directories actually exist (catches missing downloads early)
         if not self.frames_dir.exists():
