@@ -8,9 +8,10 @@ import json
 
 
 class YouTubeVOSDataset(Dataset):
-    def __init__(self, root_dir):
+    def __init__(self, root_dir, target_seq_len=100):
         self.jpeg_path = os.path.join(root_dir, "JPEGImages")
         self.target_res = TARGET_RES
+        self.target_seq_len = target_seq_len
 
         if not os.path.exists(self.jpeg_path):
             raise FileNotFoundError(f"Could not find the JPEG folder: {self.jpeg_path}")
@@ -28,13 +29,20 @@ class YouTubeVOSDataset(Dataset):
         specific_jpeg_path = os.path.join(self.jpeg_path, video_id)
         all_frames = sorted([f for f in os.listdir(specific_jpeg_path) if f.endswith('.jpg')])
 
-        # Need at least SEQ_LEN frames to form one window
-        if len(all_frames) < SEQ_LEN:
+        if len(all_frames) == 0:
             return self.__getitem__(np.random.randint(0, len(self.video_list)))
 
-        # Load ALL frames
+        # Slice or pad the frame paths
+        num_frames = len(all_frames)
+        if num_frames > self.target_seq_len:
+            start_idx = np.random.randint(0, num_frames - self.target_seq_len + 1)
+            sampled_frames = all_frames[start_idx : start_idx + self.target_seq_len]
+        else:
+            padding = [all_frames[-1]] * (self.target_seq_len - num_frames)
+            sampled_frames = all_frames + padding
+
         rgb_frames = []
-        for frame_name in all_frames:
+        for frame_name in sampled_frames:
             frame_path = os.path.join(specific_jpeg_path, frame_name)
             jpeg_img = cv2.imread(frame_path)
             if jpeg_img is not None:
@@ -42,10 +50,11 @@ class YouTubeVOSDataset(Dataset):
                 rgb_img = cv2.cvtColor(jpeg_img, cv2.COLOR_BGR2RGB)
                 rgb_frames.append(rgb_img)
 
-        if len(rgb_frames) < SEQ_LEN:
+        # Fallback if image loading failed
+        if len(rgb_frames) < self.target_seq_len:
             return self.__getitem__(np.random.randint(0, len(self.video_list)))
 
-        return np.array(rgb_frames)  # (T, H, W, C) where T is dynamic
+        return np.array(rgb_frames)
 
 class IrregularMaskDataset(Dataset):
     def __init__(self, root_dir):
@@ -75,14 +84,14 @@ class IrregularMaskDataset(Dataset):
         return torch.from_numpy(binary_mask).unsqueeze(0)
 
 class HumanMaskDataset(Dataset):
-    def __init__(self, root_dir):
+    def __init__(self, root_dir, target_seq_len=100):
         self.mask_list = []
         self.mask_path = root_dir
         self.target_res = TARGET_RES
+        self.target_seq_len = target_seq_len
 
         if not os.path.exists(self.mask_path):
             raise FileNotFoundError(f"Could not find the human masking folder: {self.mask_path}")
-
 
         with open(os.path.join(self.mask_path, 'meta.json')) as f:
             meta = json.load(f)
@@ -103,39 +112,44 @@ class HumanMaskDataset(Dataset):
         vid_folder_path = os.path.join(self.mask_path, 'Annotations', vid_id)
 
         if not os.path.isdir(vid_folder_path):
-            return self.__getitem__(0)
+            return self.__getitem__(np.random.randint(0, len(self.mask_list)))
 
         mask_files = sorted([f for f in os.listdir(vid_folder_path) if f.endswith('.png')])
 
         if len(mask_files) == 0:
-            return self.__getitem__(0)
+            return self.__getitem__(np.random.randint(0, len(self.mask_list)))
+
+        num_frames = len(mask_files)
+        if num_frames > self.target_seq_len:
+            start_idx = np.random.randint(0, num_frames - self.target_seq_len + 1)
+            sampled_frames = mask_files[start_idx : start_idx + self.target_seq_len]
+        else:
+            padding = [mask_files[-1]] * (self.target_seq_len - num_frames)
+            sampled_frames = mask_files + padding
 
         mask_sequence = []
-
-        for frame_name in mask_files:
+        for frame_name in sampled_frames:
             frame_path = os.path.join(vid_folder_path, frame_name)
             mask_img = cv2.imread(frame_path, cv2.IMREAD_GRAYSCALE)
 
             if mask_img is not None:
                 mask_img = cv2.resize(mask_img, self.target_res)
-
                 binary_mask = (mask_img > 0).astype(np.float32)
                 mask_sequence.append(binary_mask)
 
-        if len(mask_sequence) == 0:
-            return self.__getitem__(0)
+        if len(mask_sequence) < self.target_seq_len:
+            return self.__getitem__(np.random.randint(0, len(self.mask_list)))
 
-        # Stack into a tensor of shape (T, 1, H, W)
         mask_tensor = torch.from_numpy(np.stack(mask_sequence)).unsqueeze(1)
-
         return mask_tensor
 
 
 class YouTubeVOSDatasetWithoutHumans(Dataset):
-    def __init__(self, root_dir):
+    def __init__(self, root_dir, target_seq_len=100):
         self.root_dir = root_dir
         self.jpeg_path = os.path.join(root_dir, "JPEGImages")
         self.target_res = TARGET_RES
+        self.target_seq_len = target_seq_len
         self.video_list = []
 
         meta_path = os.path.join(root_dir, 'meta.json')
@@ -150,7 +164,6 @@ class YouTubeVOSDatasetWithoutHumans(Dataset):
                         has_person = True
                         break
 
-                # FIX: Only add if there is NOT a person
                 if not has_person:
                     self.video_list.append(vid_id)
 
@@ -164,11 +177,19 @@ class YouTubeVOSDatasetWithoutHumans(Dataset):
         specific_jpeg_path = os.path.join(self.jpeg_path, video_id)
         all_frames = sorted([f for f in os.listdir(specific_jpeg_path) if f.endswith('.jpg')])
 
-        if len(all_frames) < SEQ_LEN:
+        if len(all_frames) == 0:
             return self.__getitem__(np.random.randint(0, len(self.video_list)))
 
+        num_frames = len(all_frames)
+        if num_frames > self.target_seq_len:
+            start_idx = np.random.randint(0, num_frames - self.target_seq_len + 1)
+            sampled_frames = all_frames[start_idx : start_idx + self.target_seq_len]
+        else:
+            padding = [all_frames[-1]] * (self.target_seq_len - num_frames)
+            sampled_frames = all_frames + padding
+
         rgb_frames = []
-        for frame_name in all_frames:
+        for frame_name in sampled_frames:
             frame_path = os.path.join(specific_jpeg_path, frame_name)
             img = cv2.imread(frame_path)
             if img is not None:
@@ -176,7 +197,9 @@ class YouTubeVOSDatasetWithoutHumans(Dataset):
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                 rgb_frames.append(img)
 
-        # FIX: Return as numpy (T, H, W, C) so the train loop handles it consistently
+        if len(rgb_frames) < self.target_seq_len:
+            return self.__getitem__(np.random.randint(0, len(self.video_list)))
+
         return np.array(rgb_frames)
 
 
