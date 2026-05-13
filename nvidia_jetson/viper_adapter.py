@@ -3,6 +3,7 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 import torchvision.transforms.functional as TF
+from training_pipeline.config import NUM_LAYERS, BASE_CHANNELS
 
 
 class ViperAdapter:
@@ -11,11 +12,18 @@ class ViperAdapter:
         self.seq_len = seq_len
         self.fp16 = fp16
 
+        # Load from config
+        self.num_layers = NUM_LAYERS
+        self.base_channels = BASE_CHANNELS
+        self.downsample_factor = 2 ** self.num_layers
+        # Dynamically calculate the channels at the bottleneck
+        self.hidden_channels = self.base_channels * (2 ** (self.num_layers - 1))
+
         if model_path.endswith('.engine'):
             from torch2trt import TRTModule
             import tensorrt as trt
 
-            with open(model_path,'rb') as f:
+            with open(model_path, 'rb') as f:
                 engine_data = f.read()
 
             runtime = trt.Runtime(trt.Logger(trt.Logger.WARNING))
@@ -30,7 +38,11 @@ class ViperAdapter:
         else:
             from model_architecture.viper import Viper
             in_channels = seq_len * 3 + seq_len
-            self.model = Viper(in_channels=in_channels, base_channels=128, num_layers=4).to(device)
+            self.model = Viper(
+                in_channels=in_channels,
+                base_channels=self.base_channels,
+                num_layers=self.num_layers
+            ).to(device)
             self.model.load_state_dict(torch.load(model_path, map_location=device))
             if self.fp16:
                 self.model = self.model.half()
@@ -67,12 +79,9 @@ class ViperAdapter:
         full_input = torch.cat([pixel_input, mask_input], dim=1)
 
         # TensorRT cannot accept 'None' as an input binding.
-        # Initialize zero tensor matching your GRU hidden state configuration.
         if self.hidden_state is None:
-            # Note: Update '128' (BASE_CHANNELS) and the spatial dims if they differ
-            # in your specific ConvGRU implementation's downsampled bottleneck space.
             self.hidden_state = torch.zeros(
-                (B, 128, H // 4, W // 4),
+                (B, self.hidden_channels, H // self.downsample_factor, W // self.downsample_factor),
                 dtype=full_input.dtype,
                 device=self.device
             )
