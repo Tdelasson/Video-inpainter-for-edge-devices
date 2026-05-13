@@ -14,6 +14,7 @@ import torch
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from Baselines.fuseformer_om_adapter import FuseFormerOMAdapter
+from Baselines.e2fgvi_adapter import E2FGVIAdapter
 from Baselines.propainter_adapter import ProPainterAdapter
 from Baselines.vinet_adapter import ViNETAdapter
 from viper_adapter import ViperAdapter
@@ -30,6 +31,7 @@ SENSOR_ID = 0
 
 REPO_ROOT = Path(__file__).resolve().parent
 DEFAULT_FUSEFORMER_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/OnlineInpainting/fuseformer.pth").resolve()
+DEFAULT_E2FGVI_HQ_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/OnlineInpainting/E2FGVI-HQ-CVPR22.pth").resolve()
 DEFAULT_PROPAINTER_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/ProPainter/ProPainter.pth").resolve()
 DEFAULT_PROPAINTER_RAFT_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/ProPainter/raft-things.pth").resolve()
 DEFAULT_PROPAINTER_FLOW_WEIGHTS_PATH = (
@@ -46,7 +48,7 @@ def parse_args() -> argparse.Namespace:
         "--inpaint-model",
         type=str,
         default="none",
-        choices=["none", "fuseformer_om", "propainter", "vinet", "viper"],
+        choices=["none", "fuseformer_om", "e2fgvi_hq", "propainter", "vinet", "viper"],
         help="Optional baseline inpainting model",
     )
     parser.add_argument(
@@ -57,6 +59,30 @@ def parse_args() -> argparse.Namespace:
         help="Right stream mode: mask, inpaint, or auto",
     )
     parser.add_argument("--imgsz", type=int, default=256, help="Image size (must match TRT engine)")
+    parser.add_argument(
+        "--propainter-ref-stride",
+        type=int,
+        default=10,
+        help="Stride of global reference frames (higher uses less memory)",
+    )
+    parser.add_argument(
+        "--propainter-neighbor-length",
+        type=int,
+        default=10,
+        help="Length of local neighboring frames (lower uses less memory)",
+    )
+    parser.add_argument(
+        "--propainter-subvideo-length",
+        type=int,
+        default=80,
+        help="Sub-video length for long videos (lower uses less memory)",
+    )
+    parser.add_argument(
+        "--propainter-raft-iters",
+        type=int,
+        default=20,
+        help="RAFT iterations for ProPainter flow estimation",
+    )
     parser.add_argument("--infer-every", type=int, default=2, help="Run inpainting every N frames")
     parser.add_argument("--fp16", action="store_true", help="Use fp16 where supported")
     parser.add_argument("--display", action="store_true", help="Optional local preview")
@@ -108,6 +134,8 @@ def build_inpainter(model_name: str, device: str):
         return None, 0
     if model_name == "fuseformer_om":
         return FuseFormerOMAdapter(str(DEFAULT_FUSEFORMER_WEIGHTS_PATH), device=device, fp16=args.fp16), 8
+    if model_name == "e2fgvi_hq":
+        return E2FGVIAdapter(str(DEFAULT_E2FGVI_HQ_WEIGHTS_PATH), device=device, fp16=args.fp16), 10
     if model_name == "propainter":
         return ProPainterAdapter(
             weights_path=str(DEFAULT_PROPAINTER_WEIGHTS_PATH),
@@ -115,6 +143,10 @@ def build_inpainter(model_name: str, device: str):
             flow_weights_path=str(DEFAULT_PROPAINTER_FLOW_WEIGHTS_PATH),
             device=device,
             fp16=args.fp16,
+            ref_stride=args.propainter_ref_stride,
+            neighbor_length=args.propainter_neighbor_length,
+            subvideo_length=args.propainter_subvideo_length,
+            raft_iters=args.propainter_raft_iters,
         ), 12
     if model_name == "vinet":
         return ViNETAdapter(str(DEFAULT_VINET_WEIGHTS_PATH), device=device, fp16=args.fp16), 10

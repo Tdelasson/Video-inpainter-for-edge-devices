@@ -12,6 +12,9 @@ import torch
 sys.path.insert(0, ".")
 
 from Baselines.fuseformer_om_adapter import FuseFormerOMAdapter
+from Baselines.e2fgvi_adapter import E2FGVIAdapter
+from Baselines.constant_fill_adapter import ConstantFillAdapter
+from Baselines.opencv_inpaint_adapter import OpenCVInpaintAdapter
 from Baselines.propainter_adapter import ProPainterAdapter
 from Baselines.vinet_adapter import ViNETAdapter
 from Metrics.metrics import measure_video_run
@@ -19,8 +22,9 @@ from Test_Data.dataloader import TestDataset
 from viper_adapter import ViperAdapter
 
 REPO_ROOT = Path(__file__).resolve().parent
-DEFAULT_RESULTS_DIR = REPO_ROOT / "Results2"
+DEFAULT_RESULTS_DIR = REPO_ROOT / "Results"
 DEFAULT_FUSEFORMER_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/OnlineInpainting/fuseformer.pth").resolve()
+DEFAULT_E2FGVI_HQ_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/OnlineInpainting/E2FGVI-HQ-CVPR22.pth").resolve()
 DEFAULT_PROPAINTER_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/ProPainter/ProPainter.pth").resolve()
 DEFAULT_PROPAINTER_RAFT_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/ProPainter/raft-things.pth").resolve()
 DEFAULT_PROPAINTER_FLOW_WEIGHTS_PATH = (
@@ -51,7 +55,7 @@ def parse_args() -> argparse.Namespace:
         "--model",
         type=str,
         default="fuseformer_om",
-        choices=["fuseformer_om", "propainter", "vinet", "viper"],
+        choices=["fuseformer_om", "e2fgvi_hq", "propainter", "vinet", "viper", "opencv_inpaint", "constant_fill"],
         help="Model adapter to run",
     )
     parser.add_argument(
@@ -63,7 +67,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--frames-subdir",
         type=str,
-        default="JPEGImages",
+        default="JPEGImages_432_240",
         help="Frame folder under Test_Data/<dataset> (e.g. JPEGImages or JPEGImages_432_240)",
     )
     parser.add_argument(
@@ -97,6 +101,30 @@ def parse_args() -> argparse.Namespace:
         help="Path to recurrent flow completion weights (used by ProPainter)",
     )
     parser.add_argument(
+        "--propainter-ref-stride",
+        type=int,
+        default=10,
+        help="Stride of global reference frames (higher uses less memory)",
+    )
+    parser.add_argument(
+        "--propainter-neighbor-length",
+        type=int,
+        default=10,
+        help="Length of local neighboring frames (lower uses less memory)",
+    )
+    parser.add_argument(
+        "--propainter-subvideo-length",
+        type=int,
+        default=80,
+        help="Sub-video length for long videos (lower uses less memory)",
+    )
+    parser.add_argument(
+        "--propainter-raft-iters",
+        type=int,
+        default=20,
+        help="RAFT iterations for ProPainter flow estimation",
+    )
+    parser.add_argument(
         "--viper-seq-len",
         type=int,
         default=5,
@@ -106,6 +134,19 @@ def parse_args() -> argparse.Namespace:
         "--fp16",
         action="store_true",
         help="Run the adapter in fp16 mode",
+    )
+    parser.add_argument(
+        "--opencv-method",
+        type=str,
+        default="telea",
+        choices=["telea", "ns"],
+        help="OpenCV inpainting method used when --model opencv_inpaint",
+    )
+    parser.add_argument(
+        "--opencv-radius",
+        type=float,
+        default=3.0,
+        help="OpenCV inpainting radius used when --model opencv_inpaint",
     )
     return parser.parse_args()
 
@@ -131,6 +172,15 @@ def _build_adapter(args: argparse.Namespace, device: str):
         )
         return adapter, adapter.model_h, adapter.model_w
 
+    if model_key == "e2fgvi_hq":
+        weights_path = args.weights_path or DEFAULT_E2FGVI_HQ_WEIGHTS_PATH
+        adapter = E2FGVIAdapter(
+            weights_path=str(weights_path),
+            device=device,
+            fp16=args.fp16,
+        )
+        return adapter, adapter.model_h, adapter.model_w
+
     if model_key == "propainter":
         weights_path = args.weights_path or DEFAULT_PROPAINTER_WEIGHTS_PATH
         adapter = ProPainterAdapter(
@@ -139,6 +189,10 @@ def _build_adapter(args: argparse.Namespace, device: str):
             flow_weights_path=str(args.flow_weights_path),
             device=device,
             fp16=args.fp16,
+            ref_stride=args.propainter_ref_stride,
+            neighbor_length=args.propainter_neighbor_length,
+            subvideo_length=args.propainter_subvideo_length,
+            raft_iters=args.propainter_raft_iters,
         )
         return adapter, adapter.model_h, adapter.model_w
 
@@ -162,6 +216,17 @@ def _build_adapter(args: argparse.Namespace, device: str):
         if not hasattr(adapter, "name"):
             adapter.name = "viper"
         return adapter, getattr(adapter, "model_h", None), getattr(adapter, "model_w", None)
+
+    if model_key == "opencv_inpaint":
+        adapter = OpenCVInpaintAdapter(
+            method=args.opencv_method,
+            radius=args.opencv_radius,
+        )
+        return adapter, None, None
+
+    if model_key == "constant_fill":
+        adapter = ConstantFillAdapter()
+        return adapter, None, None
 
     raise ValueError(f"Unsupported model: {args.model}")
 
@@ -232,6 +297,18 @@ def main() -> None:
                 "num_frames": len(video.frames),
             }
 
+            for opt_key in (
+                "baseline_allocated_mb",
+                "baseline_reserved_mb",
+                "peak_allocated_mb",
+                "peak_reserved_mb",
+                "cuda_total_mb",
+                "cuda_used_start_mb",
+                "cuda_used_end_mb",
+            ):
+                if opt_key in perf and perf[opt_key] is not None:
+                    video_metrics[opt_key] = perf[opt_key]
+
             if mask_type == "synthetic":
                 save_prediction_video(video.name, result, official_pred_root)
 
@@ -246,7 +323,18 @@ def main() -> None:
         }
 
         if split_metrics:
-            for key in ("fps", "latency_ms", "peak_memory_mb"):
+            for key in (
+                "fps",
+                "latency_ms",
+                "peak_memory_mb",
+                "baseline_allocated_mb",
+                "baseline_reserved_mb",
+                "peak_allocated_mb",
+                "peak_reserved_mb",
+                "cuda_total_mb",
+                "cuda_used_start_mb",
+                "cuda_used_end_mb",
+            ):
                 vals = [m[key] for m in split_metrics if key in m]
                 if vals:
                     summary[key] = round(float(np.mean(vals)), 4)

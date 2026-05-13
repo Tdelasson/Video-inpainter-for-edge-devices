@@ -1,0 +1,15 @@
+{
+  "model": "ConstantFill",
+  "dataset": "DAVIS",
+  "mask_type": "synthetic",
+  "fp16": false,
+  "num_videos": 50,
+  "fps": 435.8686,
+  "latency_ms": 2.2978,
+  "peak_memory_mb": 0.0,
+  "psnr": 25.8974,
+  "ssim": 0.9551,
+  "vfid": 1.9715,
+  "ewarp": 0.001769,
+  "ewarp_x1e2": 0.177
+}

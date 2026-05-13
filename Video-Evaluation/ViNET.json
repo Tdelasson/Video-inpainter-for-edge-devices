@@ -1,0 +1,15 @@
+{
+  "model": "ViNET",
+  "dataset": "DAVIS",
+  "mask_type": "synthetic",
+  "fp16": false,
+  "num_videos": 50,
+  "fps": 1.6876,
+  "latency_ms": 598.1164,
+  "peak_memory_mb": 1220.4366,
+  "psnr": 28.4904,
+  "ssim": 0.9617,
+  "vfid": 0.9921,
+  "ewarp": 0.001585,
+  "ewarp_x1e2": 0.159
+}
