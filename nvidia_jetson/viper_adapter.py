@@ -63,9 +63,13 @@ class ViperAdapter:
         ]
 
         masks = []
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (21, 21))
+        # Training used a max radius of 3, which equals a 7x7 kernel size.
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+
         for m in mask_list[-self.seq_len:]:
-            m_processed = cv2.dilate(m, kernel, iterations=32)
+            # Apply training-equivalent dilation (1 iteration)
+            m_processed = cv2.dilate(m, kernel, iterations=1)
+            # The blur already matches training (5x5, sigma 2.0)
             m_processed = cv2.GaussianBlur(m_processed, (5, 5), 2.0)
 
             masks.append(torch.from_numpy(cv2.resize(m_processed, target_res)).unsqueeze(0))
