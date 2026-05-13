@@ -67,10 +67,7 @@ class ViperAdapter:
 
         for m in mask_list[-self.seq_len:]:
             _, m_processed = cv2.threshold(m, 0.5, 1.0, cv2.THRESH_BINARY)
-
-            m_processed = cv2.dilate(m_processed, kernel, iterations=4)
-            m_processed = cv2.GaussianBlur(m_processed, (5, 5), 2.0)
-
+            m_processed = cv2.dilate(m_processed, kernel, iterations=1)
             masks.append(torch.from_numpy(cv2.resize(m_processed, target_res)).unsqueeze(0))
 
         video_tensor = torch.stack(frames).unsqueeze(0).to(self.device).float() / 255.0
@@ -100,7 +97,8 @@ class ViperAdapter:
 
             target_mask = mask_tensor[:, -1]
             target_frame = video_tensor[:, -1]
-            composited = output * target_mask + target_frame * (1 - target_mask)
+            binary_mask = (target_mask > 0.5).float()
+            composited = output * binary_mask + target_frame * (1 - binary_mask)
 
             res = composited.squeeze(0).permute(1, 2, 0).cpu().float().numpy()
             res = (res * 255).clip(0, 255).astype('uint8')
