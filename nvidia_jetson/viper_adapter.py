@@ -94,7 +94,10 @@ class ViperAdapter:
 
             target_mask = mask_tensor[:, -1]
             target_frame = video_tensor[:, -1]
-            composited = output * target_mask + target_frame * (1 - target_mask)
+
+            hard_mask = (target_mask > 0.05).float()
+
+            composited = output * hard_mask + target_frame * (1 - hard_mask)
 
             res = composited.squeeze(0).permute(1, 2, 0).cpu().float().numpy()
             res = (res * 255).clip(0, 255).astype('uint8')
