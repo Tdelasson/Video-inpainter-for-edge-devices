@@ -63,10 +63,12 @@ class ViperAdapter:
         ]
 
         masks = []
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7))
 
         for m in mask_list[-self.seq_len:]:
-            m_processed = cv2.dilate(m, kernel, iterations=3)
+            _, m_processed = cv2.threshold(m, 0.5, 1.0, cv2.THRESH_BINARY)
+
+            m_processed = cv2.dilate(m_processed, kernel, iterations=4)
             m_processed = cv2.GaussianBlur(m_processed, (5, 5), 2.0)
 
             masks.append(torch.from_numpy(cv2.resize(m_processed, target_res)).unsqueeze(0))
@@ -83,7 +85,6 @@ class ViperAdapter:
         mask_input = mask_tensor.squeeze(2)
         full_input = torch.cat([pixel_input, mask_input], dim=1)
 
-        # TensorRT cannot accept 'None' as an input binding.
         if self.hidden_state is None:
             self.hidden_state = torch.zeros(
                 (B, self.hidden_channels, H // self.downsample_factor, W // self.downsample_factor),
