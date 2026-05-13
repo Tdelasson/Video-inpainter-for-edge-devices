@@ -61,10 +61,14 @@ class ViperAdapter:
             torch.from_numpy(cv2.cvtColor(cv2.resize(f, target_res), cv2.COLOR_BGR2RGB)).permute(2, 0, 1)
             for f in frame_list[-self.seq_len:]
         ]
-        masks = [
-            torch.from_numpy(cv2.resize(m, target_res)).unsqueeze(0)
-            for m in mask_list[-self.seq_len:]
-        ]
+
+        masks = []
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (21, 21))
+        for m in mask_list[-self.seq_len:]:
+            m_processed = cv2.dilate(m, kernel, iterations=32)
+            m_processed = cv2.GaussianBlur(m_processed, (5, 5), 2.0)
+
+            masks.append(torch.from_numpy(cv2.resize(m_processed, target_res)).unsqueeze(0))
 
         video_tensor = torch.stack(frames).unsqueeze(0).to(self.device).float() / 255.0
         mask_tensor = torch.stack(masks).unsqueeze(0).to(self.device).float().clamp(0.0, 1.0)
