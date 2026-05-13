@@ -191,7 +191,7 @@ def ai_thread():
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (21, 21))
         mask = cv2.dilate(mask, kernel, iterations=32)
 
-        mask = cv2.GaussianBlur(mask, (21, 21), 7.0)
+        mask = cv2.GaussianBlur(mask, (5, 5), 2.0)
         mask = mask.astype("float32")
 
         frame_buffer.append(frame)
