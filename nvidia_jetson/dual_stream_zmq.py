@@ -189,7 +189,7 @@ def ai_thread():
 
         mask = segmenter.segment(frame, return_annotated=False)
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (21, 21))
-        mask = cv2.dilate(mask, kernel, iterations=4)
+        mask = cv2.dilate(mask, kernel, iterations=8)
 
         mask = cv2.GaussianBlur(mask, (21, 21), 7.0)
         mask = mask.astype("float32")
