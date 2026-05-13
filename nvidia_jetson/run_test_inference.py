@@ -246,7 +246,7 @@ def _run_video_inpaint(adapter, model_key: str, frames: list[np.ndarray], masks:
         pad = max(0, seq_len - (idx + 1))
         padded_frames = [frames[0]] * pad + frames[: idx + 1]
         padded_masks = [masks[0]] * pad + masks[: idx + 1]
-        pred = adapter.inpaint(padded_frames, padded_masks, resize_to_original=False)
+        pred = adapter.inpaint(padded_frames, padded_masks, resize_to_original=True)
         outputs.append(pred[-1])
 
     return outputs
