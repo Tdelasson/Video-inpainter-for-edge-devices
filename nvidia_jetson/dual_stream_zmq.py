@@ -188,6 +188,9 @@ def ai_thread():
         ts_stage_start = time.perf_counter()
 
         mask = segmenter.segment(frame, return_annotated=False)
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7))
+        mask = cv2.dilate(mask, kernel, iterations=1)
+        mask = cv2.GaussianBlur(mask, (5, 5), 2.0)
         frame_buffer.append(frame)
         mask_buffer.append(mask)
 
