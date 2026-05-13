@@ -24,8 +24,8 @@ from Masking.yolo_segmenter import YOLOSegmenter
 DIRECT_PORT = 5000
 AI_PORT = 5001
 STATS_PORT = 5002
-WIDTH = 256
-HEIGHT = 256
+WIDTH = 512
+HEIGHT = 512
 FPS = 30
 SENSOR_ID = 0
 
@@ -113,7 +113,7 @@ socket_stats.bind(f"tcp://*:{STATS_PORT}")
 
 #Generating a GStream-pipeline -> collects the video from the CSI-camera and converts it to a format OpenCV can read.
 #Image processing happens on the GPU to spare the CPU's power
-def gstreamer_pipeline_in(sensor_id=0, w=WIDTH, h=HEIGHT, fps=FPS):
+def gstreamer_pipeline_in(sensor_id=0, w=args.imgsz, h=args.imgsz, fps=FPS):
     # nvarguscamerasrc caps select the sensor mode (native resolution).
     # A second nvvidconv stage performs the actual scaling to w x h.
     return (
@@ -191,8 +191,7 @@ def ai_thread():
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7))
         mask = cv2.dilate(mask, kernel, iterations=1)
         mask = cv2.GaussianBlur(mask, (5, 5), 2.0)
-
-        mask = mask.astype("float32") / 255.0
+        mask = mask.astype("float32")
 
         frame_buffer.append(frame)
         mask_buffer.append(mask)
@@ -206,11 +205,15 @@ def ai_thread():
                 print(f"Inpainting warning on frame {frame_id}: {exc}")
 
         if args.right_view == "mask":
-            out_frame = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
+            # Due to us training on masks in the 0.0-1.0 range, we need to convert back to 0-255 uint8 for visualization
+            vis_mask = (mask * 255).astype("uint8")
+            out_frame = cv2.cvtColor(vis_mask, cv2.COLOR_GRAY2BGR)
         elif args.right_view == "inpaint":
-            out_frame = last_inpaint if last_inpaint is not None else make_mask_overlay(frame, mask)
+            vis_mask = (mask * 255).astype("uint8")
+            out_frame = last_inpaint if last_inpaint is not None else make_mask_overlay(frame, vis_mask)
         else:
-            out_frame = last_inpaint if last_inpaint is not None else make_mask_overlay(frame, mask)
+            vis_mask = (mask * 255).astype("uint8")
+            out_frame = last_inpaint if last_inpaint is not None else make_mask_overlay(frame, vis_mask)
 
         #komprimer og send via ZMQ
         _, buffer = cv2.imencode('.jpg', out_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
@@ -270,7 +273,7 @@ cap = open_camera()
 #checks if there is connection to the camera and if GStreamer could start udpsink correct
 #if not the program is exited.
 if not cap.isOpened():
-    print("Fejl: Kunne ikke åbne kamera.")
+    print("Error, could not open camera. Please check the connection and GStreamer pipeline.")
     sys.exit()
 
 
@@ -278,8 +281,8 @@ if not cap.isOpened():
 t = threading.Thread(target=ai_thread, daemon=True)
 t.start()
 
-print(f"Streamer nu CAM1 direkte til port:{DIRECT_PORT} og port:{AI_PORT}\n")
-print(f"Capture config: {WIDTH}x{HEIGHT}@{FPS} sensor-id={SENSOR_ID}")
+print(f"Streaming CAM1 to port:{DIRECT_PORT} and port:{AI_PORT}\n")
+print(f"Capture config: {args.imgsz}x{args.imgsz}@{FPS} sensor-id={SENSOR_ID}")
 print(f"Segmentation model: {args.seg_model}")
 if args.seg_model_path:
     print(f"Segmentation weights override: {args.seg_model_path}")
@@ -315,7 +318,7 @@ try:
         frame_id += 1
 
 except KeyboardInterrupt:
-    print("\n Stopper stream...")
+    print("\n Stopping stream...")
 
 
 #Releases the camera (CSI-port)
@@ -337,4 +340,4 @@ finally:
     context.term()
     if args.display:
         cv2.destroyAllWindows()
-    print("Alt er released correct.")
+    print("Everything is released and closed. Exiting.")
