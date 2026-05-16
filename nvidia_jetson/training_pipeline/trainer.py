@@ -386,7 +386,7 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
 
                 if current_iter % 10000 == 0:
                     torch.save(model.state_dict(),
-                               os.path.join(save_dir, "best_model.pth"))
+                               os.path.join(save_dir, f"model_it_{current_iter}.pth"))
                     print(f"Model saved")
 
                     torch.save(discriminator.discriminator.state_dict(),
