@@ -139,7 +139,7 @@ def validate(args, model, flow_model, val_loader, val_mask_dataset, criterion, d
 
                 prev_composited = composited
 
-            if i == 0 and comps:
+            if i == 0 and comps and args.mask_type == "human":
                 save_video_previews(save_dir, f"val_{current_iter}", comps, tgts, ins)
 
     model.train()
