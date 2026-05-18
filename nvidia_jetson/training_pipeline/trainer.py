@@ -320,7 +320,7 @@ def train(args, model, discriminator, train_loader, val_loader, mask_dataset, va
                     weights = get_loss_weights(current_iter, args.iterations, args)
 
                     # Wrap criterion forward pass in autocast
-                    with autocast():
+                    with autocast("cuda"):
                         total_loss, l1_m, l1_f, perc_v, style_v, temp_v, adv = criterion(
                             output=output, target=target, mask=target_mask,
                             prev_output_gt=prev_output_gt,
@@ -334,7 +334,7 @@ def train(args, model, discriminator, train_loader, val_loader, mask_dataset, va
                     gen_stepped = True
 
                 else:
-                    with torch.no_grad(), autocast():
+                    with torch.no_grad(), autocast("cuda"):
                         total_loss, l1_m, l1_f, perc_v, style_v, temp_v, adv = criterion(
                             output=output,
                             target=target,
@@ -369,7 +369,7 @@ def train(args, model, discriminator, train_loader, val_loader, mask_dataset, va
                 fake_batch = torch.cat(all_fake_seqs, dim=0)
 
                 # Wrap discriminator forward in autocast
-                with autocast():
+                with autocast("cuda"):
                     real_pred = discriminator(real_batch)
                     fake_pred = discriminator(fake_batch)
                     d_loss = (F.relu(1.0 - real_pred).mean() + F.relu(1.0 + fake_pred).mean()) * 0.5
