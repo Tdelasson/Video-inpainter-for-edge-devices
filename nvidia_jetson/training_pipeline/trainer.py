@@ -390,7 +390,7 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                     print(f"Model saved")
 
                     torch.save(discriminator.discriminator.state_dict(),
-                               os.path.join(save_dir, f"best_discriminator.pth"))
+                               os.path.join(save_dir, f"best_discriminator_it_{current_iter}.pth"))
                     print(f"Discriminator saved ")
 
             if current_iter >= args.iterations:
