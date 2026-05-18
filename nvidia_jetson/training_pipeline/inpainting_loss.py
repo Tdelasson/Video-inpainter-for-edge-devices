@@ -47,14 +47,15 @@ class InpaintingLoss(torch.nn.Module):
         if prev_output_model is None or w_temp == 0:
             return torch.tensor(0.0, device=output.device)
 
-        # VGG features for current and previous output
-        norm_curr = self.normalize(output)
-        norm_prev = self.normalize(prev_output_model)
+        with torch.autocast("cuda", enabled=False):
+            # VGG features for current and previous output using float32
+            norm_curr = self.normalize(output.float())
+            norm_prev = self.normalize(prev_output_model.float())
 
-        # Only need first VGG slice — captures texture without being too abstract
-        feat_curr = self.slice1(norm_curr)
-        with torch.no_grad():
-            feat_prev = self.slice1(norm_prev)
+            # Only need first VGG slice — captures texture without being too abstract
+            feat_curr = self.slice1(norm_curr)
+            with torch.no_grad():
+                feat_prev = self.slice1(norm_prev)
 
         # Ensure the mask is exactly 1 channel so it broadcasts to 64 channels
         if mask.shape[1] > 1:
@@ -91,20 +92,21 @@ class InpaintingLoss(torch.nn.Module):
         l1_frame = self.l1(output * (1 - mask), target * (1 - mask)) * w["w_pixel_f"] * 1.0
 
         # Perceptual and Style (VGG)
-        norm_output = self.normalize(output)
-        norm_target = self.normalize(target)
-        out1 = self.slice1(norm_output)
-        out2 = self.slice2(out1)
-        out3 = self.slice3(out2)
-        with torch.no_grad():
-            tgt1 = self.slice1(norm_target)
-            tgt2 = self.slice2(tgt1)
-            tgt3 = self.slice3(tgt2)
+        with torch.autocast("cuda", enabled=False):
+            norm_output = self.normalize(output.float())
+            norm_target = self.normalize(target.float())
+            out1 = self.slice1(norm_output)
+            out2 = self.slice2(out1)
+            out3 = self.slice3(out2)
+            with torch.no_grad():
+                tgt1 = self.slice1(norm_target)
+                tgt2 = self.slice2(tgt1)
+                tgt3 = self.slice3(tgt2)
 
-        perceptual_loss = (self.l1(out1, tgt1) + self.l1(out2, tgt2) + self.l1(out3, tgt3)) * w["w_perc"]
-        style_loss = (self.l1(self.gram_matrix(out1), self.gram_matrix(tgt1)) +
-                      self.l1(self.gram_matrix(out2), self.gram_matrix(tgt2)) +
-                      self.l1(self.gram_matrix(out3), self.gram_matrix(tgt3))) * w["w_style"]
+            perceptual_loss = (self.l1(out1, tgt1) + self.l1(out2, tgt2) + self.l1(out3, tgt3)) * float(w["w_perc"])
+            style_loss = (self.l1(self.gram_matrix(out1), self.gram_matrix(tgt1)) +
+                          self.l1(self.gram_matrix(out2), self.gram_matrix(tgt2)) +
+                          self.l1(self.gram_matrix(out3), self.gram_matrix(tgt3))) * float(w["w_style"])
 
         # Temporal Loss
         temp_loss = self.compute_temporal_loss(output, prev_output_model, mask, w["w_temp"])
