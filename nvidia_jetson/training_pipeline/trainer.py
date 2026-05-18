@@ -21,18 +21,41 @@ from training_pipeline.mask_generator import (
     random_dilate_and_blur_mask
 )
 from training_pipeline.inpainting_loss import InpaintingLoss
-from torchvision.models.optical_flow import raft_small, Raft_Small_Weights
-from training_pipeline.discriminator import VideoPatchGAN, NoisyDiscriminator
+from training_pipeline.discriminator import PretrainedPatchDiscriminator, NoisyDiscriminator
 import argparse
 import json
 
+
+def get_loss_weights(current_iter, total_iters, args):
+    """Continuously scheduled loss weights — no discrete phase jumps."""
+
+    # Warmup fraction for each loss
+    perc_warmup = 0.05  # perceptual active almost immediately
+    style_warmup = 0.10  # style follows shortly after
+    temp_warmup = 0.20  # temporal needs some spatial foundation first
+    adv_warmup = 0.40  # adversarial introduced once model is competent
+
+    def ramp(start_frac, end_frac=None, target=1.0):
+        end_frac = end_frac or (start_frac + 0.20)
+        progress = (current_iter / total_iters - start_frac) / (end_frac - start_frac)
+        return float(np.clip(progress, 0.0, 1.0)) * target
+
+    return {
+        "w_pixel_m": args.w_pixel_m,  # always on
+        "w_pixel_f": args.w_pixel_f,  # always on
+        "w_perc": args.w_perc * ramp(perc_warmup),
+        "w_style": args.w_style * ramp(style_warmup),
+        "w_temp": args.w_temp * ramp(temp_warmup),
+        "w_adv": args.w_adv * ramp(adv_warmup),
+    }
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Train Video Inpainter Phase")
     parser.add_argument("--model_name", type=str, required=True, help="Master folder name (e.g. MyModel_V1)")
     parser.add_argument("--phase_name", type=str, required=True, help="Folder name for results")
     parser.add_argument("--iterations", type=int, required=True, default=20000)
-    parser.add_argument("--resume_from", type=str, default=None, help="Path to checkpoint .pth")
+    parser.add_argument("--resume_checkpoint", type=str, default=None,
+                        help="Full training checkpoint to resume from (includes iter count)")
 
     # Architecture/Data Config
     parser.add_argument("--batch_size", type=int, default=BATCH_SIZE)
@@ -40,7 +63,6 @@ def parse_args():
     parser.add_argument("--lr", type=float, default=0.0001)
 
     # Curriculum Parameters
-    parser.add_argument("--mask_type", type=str, choices=["random", "flying", "arbitrary", "human"], required=True)
     parser.add_argument("--use_memory", action="store_true", help="Enable persistent ConvGRU state")
 
     # Loss Weights
@@ -56,7 +78,35 @@ def parse_args():
     return parser.parse_args()
 
 
-def validate(args, model, flow_model, val_loader, val_mask_dataset, criterion, device, save_dir, current_iter):
+def get_human_mask(video_data, human_mask_dataset):
+    """Sample a human silhouette mask sequence from the HumanMaskDataset."""
+    B, T, C, H, W = video_data.shape
+    device = video_data.device
+    all_masks = []
+
+    for b in range(B):
+        # Sample a random mask video sequence
+        idx = np.random.randint(0, len(human_mask_dataset))
+        mask_seq = human_mask_dataset[idx]  # Returns (Seq_Len, 1, H, W) tensor
+
+        # Match temporal length
+        t_len = min(mask_seq.shape[0], T)
+        mask_seq = mask_seq[:t_len]
+
+        # Resize the entire sequence at once to match video resolution
+        mask_resized = F.interpolate(
+            mask_seq.float(),
+            size=(H, W),
+            mode='bilinear',
+            align_corners=False
+        )
+
+        all_masks.append(mask_resized)
+
+    return torch.stack(all_masks).to(device)  # (B, T, 1, H, W)
+
+
+def validate(args, model, val_loader, val_mask_dataset, human_mask_dataset, criterion, device, save_dir, current_iter):
     model.eval()
     metrics = {"total": [], "mask": [], "frame": [], "psnr": [], "temporal_consistency": []}
 
@@ -65,23 +115,16 @@ def validate(args, model, flow_model, val_loader, val_mask_dataset, criterion, d
             if i >= 10:
                 break
 
-            if args.mask_type == "human":
+            if isinstance(data, dict) and "video" in data:
                 video_data = data["video"].float().to(device) / 255.0
-                masks = data["mask"].float().to(device)
             else:
                 video_data = data.float().to(device) / 255.0
 
             video_data = video_data.permute(0, 1, 4, 2, 3)
             B, T, C, H, W = video_data.shape
 
-            # Fix: Apply the correct mask generator based on the mask type
-            if args.mask_type != "human":
-                if args.mask_type == "random":
-                    masks = generate_random_square_mask(video_data)
-                elif args.mask_type == "flying":
-                    masks = generate_flying_square_mask(video_data)
-                elif args.mask_type == "arbitrary":
-                    masks = generate_arbitrary_shape_mask(video_data, val_mask_dataset)
+            masks = get_mask_for_iter(current_iter, args.iterations, video_data,
+                                      val_mask_dataset, human_mask_dataset)
 
             masks = random_dilate_and_blur_mask(masks)
             masked_video = video_data * (1.0 - masks)
@@ -139,7 +182,7 @@ def validate(args, model, flow_model, val_loader, val_mask_dataset, criterion, d
 
                 prev_composited = composited
 
-            if i == 0 and comps and args.mask_type == "human":
+            if i == 0 and comps:
                 save_video_previews(save_dir, f"val_{current_iter}", comps, tgts, ins)
 
     model.train()
@@ -160,37 +203,52 @@ class Logger(object):
         self.terminal.flush()
         self.log.flush()
 
+def get_mask_for_iter(current_iter, total_iters, video_data,
+                       mask_dataset, human_mask_dataset=None):
+    progress = current_iter / total_iters
+    H, W = video_data.shape[3], video_data.shape[4]
 
-def train(args, model, flow_model, discriminator, train_loader, val_loader, mask_dataset, val_mask_dataset,
+    # After 70% of training, mix in human masks
+    if human_mask_dataset is not None and progress > 0.70:
+        return get_human_mask(video_data, human_mask_dataset)
+
+    # Arbitrary mask with growing size
+    min_frac = 0.10
+    max_frac = 0.40
+    current_max_frac = min_frac + progress * (max_frac - min_frac)
+    current_max_size = int(current_max_frac * min(H, W))
+    current_min_size = max(20, int(current_max_size * 0.3))
+
+    return generate_arbitrary_shape_mask(
+        video_data, mask_dataset,
+        size_range=(current_min_size, current_max_size)
+    )
+
+def train(args, model, discriminator, train_loader, val_loader, mask_dataset, val_mask_dataset, human_mask_dataset,
           optimizer_model, optimizer_disc, scheduler_model,
-          scheduler_disc, criterion, adversarial_criterion, device, save_dir):
+          scheduler_disc, criterion, adversarial_criterion, device, save_dir, start_iter=0):
     metrics_history = {"total": [], "mask": [], "frame": [], "perc": [], "style": [], "temp": [], "adv": []}
     best_val_loss = float("inf")
     patience_counter = 0
 
-    current_iter = 0
-    print(f"Starting Phase: {args.phase_name} | Mask: {args.mask_type} | Memory: {args.use_memory}")
+    current_iter = start_iter
+    print(f"Starting Phase: {args.phase_name} | Memory: {args.use_memory}")
 
     while current_iter < args.iterations:
         for data in train_loader:
             if current_iter >= args.iterations: break
 
-            if args.mask_type == "human":
+            if isinstance(data, dict) and "video" in data:
                 video_data = data["video"].float().to(device) / 255.0
-                masks = data["mask"].float().to(device)
             else:
                 video_data = data.float().to(device) / 255.0
 
             video_data = video_data.permute(0, 1, 4, 2, 3)
+            masks = get_mask_for_iter(current_iter, args.iterations, video_data,
+                                      mask_dataset, human_mask_dataset)
+
             B, T, C, H, W = video_data.shape
 
-            if args.mask_type != "human":
-                if args.mask_type == "random":
-                    masks = generate_random_square_mask(video_data)
-                elif args.mask_type == "flying":
-                    masks = generate_flying_square_mask(video_data)
-                elif args.mask_type == "arbitrary":
-                    masks = generate_arbitrary_shape_mask(video_data, mask_dataset)
 
             masks = random_dilate_and_blur_mask(masks)
             masked_video = video_data * (1.0 - masks)
@@ -217,21 +275,7 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                 mask_input = masks_window.reshape(B, args.seq_len, H, W)
                 full_input = torch.cat([pixel_input, mask_input], dim=1)
 
-                flow = None
-                if t > 0 and args.w_temp > 0:
-                    with torch.no_grad():
-                        img1 = (window[:, -2] * 2.0) - 1.0
-                        img2 = (window[:, -1] * 2.0) - 1.0
-                        flow = flow_model(img1, img2)[-1]
-
                 output, hidden_state = model(full_input, hidden_state)
-
-                if flow is not None and prev_output_model is not None and current_iter % 100 == 0:
-                    with torch.no_grad():
-                        warped = warp(prev_output_model, flow)
-                        print(f"Warp mean: {warped.mean():.4f} | "
-                              f"Diff from output: {(output - warped).abs().mean():.4f} | "
-                              f"Prev model mean: {prev_output_model.mean():.4f}")
 
                 if args.use_memory and hidden_state is not None:
                     hidden_state = hidden_state.detach()
@@ -262,11 +306,9 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                     real_pred = discriminator(real_seq)
                     fake_pred = discriminator(fake_seq.detach())
 
-                    mask_seq = real_seq[:, 3:4, ...]
-
-                    # Align mask with the spatio-temporal patch grid
+                    disc_mask_seq = real_seq[:, 3:4, ...]
                     downsampled_mask = F.interpolate(
-                        mask_seq,
+                        disc_mask_seq,
                         size=real_pred.shape[2:],
                         mode='trilinear',
                         align_corners=False
@@ -288,7 +330,10 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                     optimizer_disc.step()
                     disc_stepped = True
 
+                    scheduled_w_adv = get_loss_weights(current_iter, args.iterations, args)["w_adv"]
                     if current_iter % 100 == 0:
+                        print(f"Scheduled w_adv: {scheduled_w_adv:.4f}")
+
                         total_disc_grad = torch.norm(torch.stack([p.grad.norm(2) for p in discriminator.parameters()
                                                                   if p.grad is not None]), 2)
                         print(
@@ -302,15 +347,15 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                 if current_iter > 0:
                     optimizer_model.zero_grad()
 
+                    weights = get_loss_weights(current_iter, args.iterations, args)
+
                     total_loss, l1_m, l1_f, perc_v, style_v, temp_v, adv = criterion(
-                        output=output,
-                        target=target,
-                        mask=target_mask,
+                        output=output, target=target, mask=target_mask,
                         prev_output_gt=prev_output_gt,
                         prev_output_model=prev_output_model,
-                        flow=flow,
                         discriminator=discriminator,
-                        fake_seq=fake_seq
+                        fake_seq=fake_seq,
+                        weight_overrides=weights
                     )
 
                     total_loss.backward()
@@ -340,7 +385,6 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
                             mask=target_mask,
                             prev_output_gt=prev_output_gt,
                             prev_output_model=prev_output_model,
-                            flow=flow,
                             discriminator=discriminator,
                             fake_seq=fake_seq
                         )
@@ -378,20 +422,24 @@ def train(args, model, flow_model, discriminator, train_loader, val_loader, mask
 
                 if current_iter % 500 == 0:
                     print(f"Running validation at iteration {current_iter}...")
-                    val_metrics = validate(args, model, flow_model, val_loader, val_mask_dataset, criterion, device,
-                                           save_dir, current_iter)
+                    val_metrics = validate(args, model, val_loader, val_mask_dataset, human_mask_dataset, criterion, device, save_dir, current_iter)
                     print(f"Validation Metrics: {val_metrics}")
 
                 current_iter += 1
 
                 if current_iter % 10000 == 0:
-                    torch.save(model.state_dict(),
-                               os.path.join(save_dir, f"model_it_{current_iter}.pth"))
-                    print(f"Model saved")
-
-                    torch.save(discriminator.discriminator.state_dict(),
-                               os.path.join(save_dir, f"best_discriminator_it_{current_iter}.pth"))
-                    print(f"Discriminator saved ")
+                    checkpoint = {
+                        "current_iter": current_iter,
+                        "model_state": model.state_dict(),
+                        "disc_state": discriminator.discriminator.state_dict(),
+                        "opt_model_state": optimizer_model.state_dict(),
+                        "opt_disc_state": optimizer_disc.state_dict(),
+                        "scheduler_model_state": scheduler_model.state_dict(),
+                        "scheduler_disc_state": scheduler_disc.state_dict(),
+                    }
+                    torch.save(checkpoint, os.path.join(save_dir, f"checkpoint_{current_iter}.pth"))
+                    # Also save as latest for easy resume:
+                    torch.save(checkpoint, os.path.join(save_dir, "checkpoint_latest.pth"))
 
             if current_iter >= args.iterations:
                 break
@@ -442,23 +490,8 @@ def main():
     in_channels = args.seq_len * 3 + args.seq_len
     model = Viper(in_channels=in_channels, base_channels=BASE_CHANNELS, num_layers=NUM_LAYERS).to(device)
 
-    # Initialize with 4 input channels instead of 3 (RGB + Mask)
-    base_discriminator = VideoPatchGAN(in_channels=4).to(device)
+    base_discriminator = PretrainedPatchDiscriminator().to(device)
     discriminator = NoisyDiscriminator(base_discriminator)
-
-    if args.resume_from:
-        model.load_state_dict(torch.load(args.resume_from))
-        print(f"Resumed Generator from {args.resume_from}")
-
-        disc_path = args.resume_from.replace("final_model.pth", "final_discriminator.pth")
-
-        if os.path.exists(disc_path):
-            base_discriminator.load_state_dict(torch.load(disc_path))
-            print(f"Resumed Discriminator from {disc_path}")
-        else:
-            print("No discriminator checkpoint found. Starting with a fresh Discriminator.")
-
-    flow_model = raft_small(weights=Raft_Small_Weights.DEFAULT).to(device).eval()
 
     opt_model = optim.Adam(model.parameters(), lr=args.lr)
     opt_disc = optim.Adam(discriminator.parameters(), lr=args.lr * 1.0)
@@ -476,36 +509,35 @@ def main():
     mask_dataset = None
     val_mask_dataset = None
 
-    if args.mask_type == "human":
-        print("Initializing Human-centric Inpainting Phase...")
-        clean_ds = YouTubeVOSDatasetWithoutHumans(root_dir=os.path.join(os.getcwd(), "training_data", "train"))
-        mask_ds = HumanMaskDataset(root_dir=os.path.join(os.getcwd(), "training_data", "train"))
-        combined_dataset = HumanInpaintingDataset(clean_ds, mask_ds)
-        loader = DataLoader(combined_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4, drop_last=True)
+    start_iter = 0
+    if args.resume_checkpoint:
+        ckpt = torch.load(args.resume_checkpoint)
+        model.load_state_dict(ckpt["model_state"])
+        base_discriminator.load_state_dict(ckpt["disc_state"])
+        opt_model.load_state_dict(ckpt["opt_model_state"])
+        opt_disc.load_state_dict(ckpt["opt_disc_state"])
+        scheduler_model.load_state_dict(ckpt["scheduler_model_state"])
+        scheduler_disc.load_state_dict(ckpt["scheduler_disc_state"])
+        start_iter = ckpt["current_iter"]
+        print(f"Resumed full training state from iter {start_iter}")
 
-        # Validation datasets
-        val_clean_ds = YouTubeVOSDatasetWithoutHumans(root_dir=os.path.join(os.getcwd(), "training_data", "valid"))
-        val_mask_dataset = HumanMaskDataset(root_dir=os.path.join(os.getcwd(), "training_data", "valid"))
-        val_combined_dataset = HumanInpaintingDataset(val_clean_ds, val_mask_dataset)
-        val_loader = DataLoader(val_combined_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4,
-                                drop_last=True)
-    else:
-        print(f"Initializing Synthetic Inpainting Phase: {args.mask_type}")
-        dataset = YouTubeVOSDataset(root_dir=os.path.join(os.getcwd(), "training_data", "train"))
-        loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=2, drop_last=True)
+    dataset = YouTubeVOSDataset(root_dir=os.path.join(os.getcwd(), "training_data", "train"))
+    loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=2, drop_last=True)
 
-        val_dataset = YouTubeVOSDataset(root_dir=os.path.join(os.getcwd(), "training_data", "valid"))
-        val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=2, drop_last=True)
+    val_dataset = YouTubeVOSDataset(root_dir=os.path.join(os.getcwd(), "training_data", "valid"))
+    val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=2, drop_last=True)
 
-        if args.mask_type == "arbitrary":
-            mask_dataset = IrregularMaskDataset(
-                root_dir=os.path.join(os.getcwd(), "training_data", "irregular_mask", "disocclusion_img_mask"))
-            val_mask_dataset = mask_dataset
+    mask_dataset = IrregularMaskDataset(
+        root_dir=os.path.join(os.getcwd(), "training_data", "irregular_mask", "disocclusion_img_mask"))
+    val_mask_dataset = mask_dataset
+
+    human_mask_dataset = HumanMaskDataset(
+        root_dir=os.path.join(os.getcwd(), "training_data", "train"))
 
     final_metrics = train(
-        args, model, flow_model, discriminator, loader, val_loader,
-        mask_dataset, val_mask_dataset, opt_model, opt_disc,
-        scheduler_model, scheduler_disc, criterion, adv_crit, device, save_dir
+        args, model, discriminator, loader, val_loader,
+        mask_dataset, val_mask_dataset, human_mask_dataset, opt_model, opt_disc,
+        scheduler_model, scheduler_disc, criterion, adv_crit, device, save_dir,  start_iter=start_iter
     )
 
     log_data = {
