@@ -507,7 +507,7 @@ def main():
     loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=4, drop_last=True)
 
     val_dataset = YouTubeVOSDataset(root_dir=os.path.join(os.getcwd(), "training_data", "valid"))
-    val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4, drop_last=True)
+    val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4, drop_last=True)
 
     mask_dataset = IrregularMaskDataset(
         root_dir=os.path.join(os.getcwd(), "training_data", "irregular_mask", "disocclusion_img_mask"))

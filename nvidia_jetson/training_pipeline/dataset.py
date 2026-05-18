@@ -8,7 +8,7 @@ import json
 
 
 class YouTubeVOSDataset(Dataset):
-    def __init__(self, root_dir, target_seq_len=15):
+    def __init__(self, root_dir, target_seq_len=20):
         self.jpeg_path = os.path.join(root_dir, "JPEGImages")
         self.target_res = TARGET_RES
         self.target_seq_len = target_seq_len
@@ -82,7 +82,7 @@ class IrregularMaskDataset(Dataset):
         return torch.from_numpy(binary_mask).unsqueeze(0)
 
 class HumanMaskDataset(Dataset):
-    def __init__(self, root_dir, target_seq_len=15):
+    def __init__(self, root_dir, target_seq_len=20):
         self.mask_list = []
         self.mask_path = root_dir
         self.target_res = TARGET_RES
@@ -143,7 +143,7 @@ class HumanMaskDataset(Dataset):
 
 
 class YouTubeVOSDatasetWithoutHumans(Dataset):
-    def __init__(self, root_dir, target_seq_len=15):
+    def __init__(self, root_dir, target_seq_len=20):
         self.root_dir = root_dir
         self.jpeg_path = os.path.join(root_dir, "JPEGImages")
         self.target_res = TARGET_RES
