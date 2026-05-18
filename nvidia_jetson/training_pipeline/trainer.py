@@ -298,7 +298,7 @@ def train(args, model, discriminator, train_loader, val_loader, mask_dataset, va
                 full_input = torch.cat([pixel_input, mask_input], dim=1)
 
                 # Wrap model forward pass in autocast
-                with autocast():
+                with autocast("cuda"):
                     output, hidden_state = model(full_input, hidden_state)
 
                 composited = output * target_mask + target * (1 - target_mask)
