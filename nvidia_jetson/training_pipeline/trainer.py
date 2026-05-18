@@ -24,6 +24,8 @@ from training_pipeline.inpainting_loss import InpaintingLoss
 from training_pipeline.discriminator import PretrainedPatchDiscriminator, NoisyDiscriminator
 import argparse
 import json
+from torch.amp import autocast, GradScaler
+
 
 
 def get_loss_weights(current_iter, total_iters, args):
@@ -234,6 +236,10 @@ def train(args, model, discriminator, train_loader, val_loader, mask_dataset, va
     current_iter = start_iter
     print(f"Starting Phase: {args.phase_name} | Memory: {args.use_memory}")
 
+    # Initialize scalers (already created in main(), but ensure they're passed or created here)
+    scaler_model = GradScaler()
+    scaler_disc = GradScaler()
+
     while current_iter < args.iterations:
         for data in train_loader:
             if current_iter >= args.iterations: break
@@ -248,8 +254,6 @@ def train(args, model, discriminator, train_loader, val_loader, mask_dataset, va
                                       mask_dataset, human_mask_dataset)
 
             B, T, C, H, W = video_data.shape
-
-
             masks = random_dilate_and_blur_mask(masks)
             masked_video = video_data * (1.0 - masks)
 
@@ -257,7 +261,25 @@ def train(args, model, discriminator, train_loader, val_loader, mask_dataset, va
             prev_output_gt = None
             prev_output_model = None
 
-            for t in range(0, T - args.seq_len + 1):
+            all_real_seqs = []
+            all_fake_seqs = []
+
+            optimizer_model.zero_grad()
+            optimizer_disc.zero_grad()
+
+            accumulated_loss = 0
+            total_t_steps = T - args.seq_len + 1
+
+            disc_stepped = False
+            gen_stepped = False
+
+            noise_decay_iters = args.iterations * 0.75
+            current_sigma = max(0.0, 0.00 * (1.0 - (current_iter / noise_decay_iters)))
+            discriminator.set_std(current_sigma)
+
+            weights = get_loss_weights(current_iter, args.iterations, args)
+
+            for t in range(0, total_t_steps):
                 if current_iter >= args.iterations:
                     break
 
@@ -275,110 +297,44 @@ def train(args, model, discriminator, train_loader, val_loader, mask_dataset, va
                 mask_input = masks_window.reshape(B, args.seq_len, H, W)
                 full_input = torch.cat([pixel_input, mask_input], dim=1)
 
-                output, hidden_state = model(full_input, hidden_state)
+                # Wrap model forward pass in autocast
+                with autocast():
+                    output, hidden_state = model(full_input, hidden_state)
 
-                if args.use_memory and hidden_state is not None:
-                    hidden_state = hidden_state.detach()
+                composited = output * target_mask + target * (1 - target_mask)
 
-                # Generate Fake Sequence and Mask Condition
-                fake_frame = output
+                # Generate Fake Sequence
+                fake_frame = composited
                 seq_frames = [window[:, i] for i in range(window.shape[1] - 1)] + [fake_frame]
-
-                # Stack seq_frames to form the temporal dimension (B, C, T, H, W)
                 fake_pixel_seq = torch.stack(seq_frames, dim=2)
                 mask_seq = masks_window.permute(0, 2, 1, 3, 4)
 
-                # Combine RGB with the Mask (4-channels)
                 fake_seq = torch.cat([fake_pixel_seq, mask_seq], dim=1)
                 real_pixel_seq = window.permute(0, 2, 1, 3, 4)
                 real_seq = torch.cat([real_pixel_seq, mask_seq], dim=1)
 
-                noise_decay_iters = args.iterations * 0.75
-                current_sigma = max(0.0, 0.00 * (1.0 - (current_iter / noise_decay_iters)))
-                discriminator.set_std(current_sigma)
-
-                disc_stepped = False
-                gen_stepped = False
-
-                optimizer_disc.zero_grad()
-
-                if args.w_adv > 0 and current_iter % 1 == 0:
-                    real_pred = discriminator(real_seq)
-                    fake_pred = discriminator(fake_seq.detach())
-
-                    disc_mask_seq = real_seq[:, 3:4, ...]
-                    downsampled_mask = F.interpolate(
-                        disc_mask_seq,
-                        size=real_pred.shape[2:],
-                        mode='trilinear',
-                        align_corners=False
-                    )
-
-                    # Hinge Loss for Discriminator applied over patches
-                    d_real_loss = (F.relu(1.0 - real_pred) * downsampled_mask).sum() / (downsampled_mask.sum() + 1e-8)
-                    d_fake_loss = (F.relu(1.0 + fake_pred) * downsampled_mask).sum() / (downsampled_mask.sum() + 1e-8)
-
-                    d_loss = d_real_loss + d_fake_loss
-
-                    d_loss.backward()
-
-                    torch.nn.utils.clip_grad_norm_(
-                        discriminator.parameters(),
-                        max_norm=5.0
-                    )
-
-                    optimizer_disc.step()
-                    disc_stepped = True
-
-                    scheduled_w_adv = get_loss_weights(current_iter, args.iterations, args)["w_adv"]
-                    if current_iter % 100 == 0:
-                        print(f"Scheduled w_adv: {scheduled_w_adv:.4f}")
-
-                        total_disc_grad = torch.norm(torch.stack([p.grad.norm(2) for p in discriminator.parameters()
-                                                                  if p.grad is not None]), 2)
-                        print(
-                            f"Disc grad norm: {total_disc_grad:.6f} | "
-                            f"Noise Std: {current_sigma:.4f} | "
-                            f"D_Loss: {d_loss.item():.4f} | "
-                            f"Real Score: {real_pred.mean().item():.4f} | "
-                            f"Fake Score: {fake_pred.mean().item():.4f}"
-                        )
+                all_real_seqs.append(real_seq.detach())
+                all_fake_seqs.append(fake_seq.detach())
 
                 if current_iter > 0:
-                    optimizer_model.zero_grad()
-
                     weights = get_loss_weights(current_iter, args.iterations, args)
 
-                    total_loss, l1_m, l1_f, perc_v, style_v, temp_v, adv = criterion(
-                        output=output, target=target, mask=target_mask,
-                        prev_output_gt=prev_output_gt,
-                        prev_output_model=prev_output_model,
-                        discriminator=discriminator,
-                        fake_seq=fake_seq,
-                        weight_overrides=weights
-                    )
-
-                    total_loss.backward()
-
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0)
-
-                    optimizer_model.step()
-                    gen_stepped = True
-
-                    if current_iter % 100 == 0:
-                        total_gen_grad = torch.norm(
-                            torch.stack([
-                                p.grad.norm(2)
-                                for p in model.parameters()
-                                if p.grad is not None
-                            ]),
-                            2
+                    # Wrap criterion forward pass in autocast
+                    with autocast():
+                        total_loss, l1_m, l1_f, perc_v, style_v, temp_v, adv = criterion(
+                            output=output, target=target, mask=target_mask,
+                            prev_output_gt=prev_output_gt,
+                            prev_output_model=prev_output_model,
+                            discriminator=discriminator,
+                            fake_seq=fake_seq,
+                            weight_overrides=weights
                         )
 
-                        print(f"Gen grad norm: {total_gen_grad:.6f}")
+                    accumulated_loss = accumulated_loss + (total_loss / total_t_steps)
+                    gen_stepped = True
 
                 else:
-                    with torch.no_grad():
+                    with torch.no_grad(), autocast():
                         total_loss, l1_m, l1_f, perc_v, style_v, temp_v, adv = criterion(
                             output=output,
                             target=target,
@@ -389,57 +345,84 @@ def train(args, model, discriminator, train_loader, val_loader, mask_dataset, va
                             fake_seq=fake_seq
                         )
 
-                if gen_stepped:
-                    scheduler_model.step()
-
-                if disc_stepped:
-                    scheduler_disc.step()
-
-                metrics_history["total"].append(total_loss.item())
-                metrics_history["mask"].append(l1_m.item())
-                metrics_history["frame"].append(l1_f.item())
-                metrics_history["perc"].append(perc_v.item())
-                metrics_history["style"].append(style_v.item())
-                metrics_history["temp"].append(temp_v.item())
-                metrics_history["adv"].append(adv.item())
-
                 with torch.no_grad():
-                    composited = output * target_mask + target * (1 - target_mask)
                     prev_output_gt = target
                     prev_output_model = composited
 
-                if current_iter % 10 == 0:
-                    print(
-                        f"[{args.phase_name}] Iter {current_iter} | "
-                        f"Total: {total_loss.item():.4f} | "
-                        f"Mask: {l1_m.item():.4f} | "
-                        f"Frame: {l1_f.item():.4f} | "
-                        f"Perc: {perc_v.item():.4f} | "
-                        f"Style: {style_v.item():.4f} | "
-                        f"Temp: {temp_v.item():.4f} | "
-                        f"Adv: {adv.item():.4f}"
-                    )
+            # Generator step with scaler
+            if gen_stepped:
+                # Scale loss and backward
+                scaler_model.scale(accumulated_loss).backward()
 
-                if current_iter % 500 == 0:
-                    print(f"Running validation at iteration {current_iter}...")
-                    val_metrics = validate(args, model, val_loader, val_mask_dataset, human_mask_dataset, criterion, device, save_dir, current_iter)
-                    print(f"Validation Metrics: {val_metrics}")
+                # Unscale before gradient clipping
+                scaler_model.unscale_(optimizer_model)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
 
-                current_iter += 1
+                # Scaled step and update
+                scaler_model.step(optimizer_model)
+                scaler_model.update()
+                scheduler_model.step()
 
-                if current_iter % 10000 == 0:
-                    checkpoint = {
-                        "current_iter": current_iter,
-                        "model_state": model.state_dict(),
-                        "disc_state": discriminator.discriminator.state_dict(),
-                        "opt_model_state": optimizer_model.state_dict(),
-                        "opt_disc_state": optimizer_disc.state_dict(),
-                        "scheduler_model_state": scheduler_model.state_dict(),
-                        "scheduler_disc_state": scheduler_disc.state_dict(),
-                    }
-                    torch.save(checkpoint, os.path.join(save_dir, f"checkpoint_{current_iter}.pth"))
-                    # Also save as latest for easy resume:
-                    torch.save(checkpoint, os.path.join(save_dir, "checkpoint_latest.pth"))
+            # Discriminator step with scaler
+            if args.w_adv > 0 and all_real_seqs:
+                real_batch = torch.cat(all_real_seqs, dim=0)
+                fake_batch = torch.cat(all_fake_seqs, dim=0)
+
+                # Wrap discriminator forward in autocast
+                with autocast():
+                    real_pred = discriminator(real_batch)
+                    fake_pred = discriminator(fake_batch)
+                    d_loss = (F.relu(1.0 - real_pred).mean() + F.relu(1.0 + fake_pred).mean()) * 0.5
+
+                # Scale, backward, unscale, clip, step
+                scaler_disc.scale(d_loss).backward()
+                scaler_disc.unscale_(optimizer_disc)
+                torch.nn.utils.clip_grad_norm_(discriminator.parameters(), max_norm=5.0)
+                scaler_disc.step(optimizer_disc)
+                scaler_disc.update()
+                scheduler_disc.step()
+                disc_stepped = True
+
+            metrics_history["total"].append(total_loss.item())
+            metrics_history["mask"].append(l1_m.item())
+            metrics_history["frame"].append(l1_f.item())
+            metrics_history["perc"].append(perc_v.item())
+            metrics_history["style"].append(style_v.item())
+            metrics_history["temp"].append(temp_v.item())
+            metrics_history["adv"].append(adv.item())
+
+            if current_iter % 10 == 0:
+                print(
+                    f"[{args.phase_name}] Iter {current_iter} | "
+                    f"Total: {total_loss.item():.4f} | "
+                    f"Mask: {l1_m.item():.4f} | "
+                    f"Frame: {l1_f.item():.4f} | "
+                    f"Perc: {perc_v.item():.4f} | "
+                    f"Style: {style_v.item():.4f} | "
+                    f"Temp: {temp_v.item():.4f} | "
+                    f"Adv: {adv.item():.4f}"
+                )
+
+            if current_iter % 500 == 0:
+                print(f"Running validation at iteration {current_iter}...")
+                val_metrics = validate(args, model, val_loader, val_mask_dataset, human_mask_dataset, criterion, device,
+                                       save_dir, current_iter)
+                print(f"Validation Metrics: {val_metrics}")
+
+            current_iter += 1
+
+            if current_iter % 10000 == 0:
+                checkpoint = {
+                    "current_iter": current_iter,
+                    "model_state": model.state_dict(),
+                    "disc_state": discriminator.discriminator.state_dict(),
+                    "opt_model_state": optimizer_model.state_dict(),
+                    "opt_disc_state": optimizer_disc.state_dict(),
+                    "scheduler_model_state": scheduler_model.state_dict(),
+                    "scheduler_disc_state": scheduler_disc.state_dict(),
+                }
+                torch.save(checkpoint, os.path.join(save_dir, f"checkpoint_{current_iter}.pth"))
+                torch.save(checkpoint, os.path.join(save_dir, "checkpoint_latest.pth"))
 
             if current_iter >= args.iterations:
                 break
@@ -447,7 +430,6 @@ def train(args, model, discriminator, train_loader, val_loader, mask_dataset, va
     torch.save(discriminator.discriminator.state_dict(),
                os.path.join(save_dir, "final_discriminator.pth"))
     return {k: np.mean(v) for k, v in metrics_history.items()}
-
 
 def save_video_previews(save_dir, it, comp_list, tgt_list, in_list, fps=10):
     if not comp_list:
@@ -522,10 +504,10 @@ def main():
         print(f"Resumed full training state from iter {start_iter}")
 
     dataset = YouTubeVOSDataset(root_dir=os.path.join(os.getcwd(), "training_data", "train"))
-    loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=2, drop_last=True)
+    loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=4, drop_last=True)
 
     val_dataset = YouTubeVOSDataset(root_dir=os.path.join(os.getcwd(), "training_data", "valid"))
-    val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=2, drop_last=True)
+    val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4, drop_last=True)
 
     mask_dataset = IrregularMaskDataset(
         root_dir=os.path.join(os.getcwd(), "training_data", "irregular_mask", "disocclusion_img_mask"))
