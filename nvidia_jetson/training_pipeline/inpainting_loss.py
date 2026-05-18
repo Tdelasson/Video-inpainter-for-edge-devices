@@ -56,6 +56,10 @@ class InpaintingLoss(torch.nn.Module):
         with torch.no_grad():
             feat_prev = self.slice1(norm_prev)
 
+        # Ensure the mask is exactly 1 channel so it broadcasts to 64 channels
+        if mask.shape[1] > 1:
+            mask = mask[:, 0:1, :, :]
+
         # Downsample mask to feature resolution
         mask_ds = F.interpolate(
             mask, size=feat_curr.shape[2:], mode='bilinear', align_corners=False
