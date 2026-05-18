@@ -33,7 +33,7 @@ class InpaintingLoss(torch.nn.Module):
 
     def gram_matrix(self, features):
         B, C, H, W = features.shape
-        f = features.view(B, C, H * W)
+        f = features.view(B, C, H * W).to(torch.float32)
         gram = torch.bmm(f, f.transpose(1, 2))
         return gram / (C * H * W)
 
