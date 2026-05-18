@@ -342,7 +342,8 @@ def train(args, model, discriminator, train_loader, val_loader, mask_dataset, va
                             prev_output_gt=prev_output_gt,
                             prev_output_model=prev_output_model,
                             discriminator=discriminator,
-                            fake_seq=fake_seq
+                            fake_seq=fake_seq,
+                            weight_overrides=weights  # Added this line
                         )
 
                 with torch.no_grad():
