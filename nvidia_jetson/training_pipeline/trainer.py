@@ -365,17 +365,19 @@ def train(args, model, discriminator, train_loader, val_loader, mask_dataset, va
 
             # Discriminator step with scaler
             if args.w_adv > 0 and all_real_seqs:
-                real_batch = torch.cat(all_real_seqs, dim=0)
-                fake_batch = torch.cat(all_fake_seqs, dim=0)
+                # Iterate sequentially to prevent OOM
+                for real_seq, fake_seq in zip(all_real_seqs, all_fake_seqs):
+                    with autocast("cuda"):
+                        real_pred = discriminator(real_seq)
+                        fake_pred = discriminator(fake_seq)
+                        # Average the loss across the temporal steps
+                        step_d_loss = (F.relu(1.0 - real_pred).mean() + F.relu(1.0 + fake_pred).mean()) * 0.5
+                        step_d_loss = step_d_loss / len(all_real_seqs)
 
-                # Wrap discriminator forward in autocast
-                with autocast("cuda"):
-                    real_pred = discriminator(real_batch)
-                    fake_pred = discriminator(fake_batch)
-                    d_loss = (F.relu(1.0 - real_pred).mean() + F.relu(1.0 + fake_pred).mean()) * 0.5
+                    # Accumulate gradients sequentially
+                    scaler_disc.scale(step_d_loss).backward()
 
-                # Scale, backward, unscale, clip, step
-                scaler_disc.scale(d_loss).backward()
+                # Unscale, clip, step
                 scaler_disc.unscale_(optimizer_disc)
                 torch.nn.utils.clip_grad_norm_(discriminator.parameters(), max_norm=5.0)
                 scaler_disc.step(optimizer_disc)
