@@ -32,10 +32,10 @@ def get_loss_weights(current_iter, total_iters, args):
     """Continuously scheduled loss weights — no discrete phase jumps."""
 
     # Warmup fraction for each loss
-    perc_warmup = 0.05  # perceptual active almost immediately
-    style_warmup = 0.10  # style follows shortly after
-    temp_warmup = 0.20  # temporal needs some spatial foundation first
-    adv_warmup = 0.35  # adversarial introduced once model is competent
+    perc_warmup = 0.00  # perceptual active almost immediately
+    style_warmup = 0.00  # style follows shortly after
+    temp_warmup = 0.00  # temporal needs some spatial foundation first
+    adv_warmup = 0.00  # adversarial introduced once model is competent
 
     def ramp(start_frac, end_frac=None, target=1.0):
         end_frac = end_frac or (start_frac + 0.20)
