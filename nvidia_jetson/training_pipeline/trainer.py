@@ -414,7 +414,7 @@ def train(args, model, discriminator, train_loader, val_loader, mask_dataset, va
 
             current_iter += 1
 
-            if current_iter % 10000 == 0:
+            if current_iter % 2500 == 0:
                 checkpoint = {
                     "current_iter": current_iter,
                     "model_state": model.state_dict(),
