@@ -35,7 +35,7 @@ def get_loss_weights(current_iter, total_iters, args):
     perc_warmup = 0.05  # perceptual active almost immediately
     style_warmup = 0.10  # style follows shortly after
     temp_warmup = 0.20  # temporal needs some spatial foundation first
-    adv_warmup = 0.40  # adversarial introduced once model is competent
+    adv_warmup = 0.35  # adversarial introduced once model is competent
 
     def ramp(start_frac, end_frac=None, target=1.0):
         end_frac = end_frac or (start_frac + 0.20)
