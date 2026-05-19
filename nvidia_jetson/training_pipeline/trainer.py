@@ -26,6 +26,16 @@ import argparse
 import json
 from torch.amp import autocast, GradScaler
 
+def get_data_root():
+    # Use /content if running in Colab, else use current working directory
+    if os.path.exists('/content/training_data'):
+        return '/content/training_data'
+    elif os.path.exists(os.path.join(os.getcwd(), 'training_data')):
+        return os.path.join(os.getcwd(), 'training_data')
+    else:
+        raise FileNotFoundError("Could not find 'training_data' in /content or current directory.")
+
+DATA_ROOT = get_data_root()
 
 
 def get_loss_weights(current_iter, total_iters, args):
@@ -495,18 +505,16 @@ def main():
         start_iter = ckpt["current_iter"]
         print(f"Resumed full training state from iter {start_iter}")
 
-    dataset = YouTubeVOSDataset(root_dir=os.path.join(os.getcwd(), "training_data", "train"))
+    dataset = YouTubeVOSDataset(root_dir=os.path.join(DATA_ROOT, "train"))
     loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=4, drop_last=True)
 
-    val_dataset = YouTubeVOSDataset(root_dir=os.path.join(os.getcwd(), "training_data", "valid"))
+    val_dataset = YouTubeVOSDataset(root_dir=os.path.join(DATA_ROOT, "valid"))
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4, drop_last=True)
 
-    mask_dataset = IrregularMaskDataset(
-        root_dir=os.path.join(os.getcwd(), "training_data", "irregular_mask", "disocclusion_img_mask"))
+    mask_dataset = IrregularMaskDataset(root_dir=os.path.join(DATA_ROOT, "irregular_mask", "disocclusion_img_mask"))
     val_mask_dataset = mask_dataset
 
-    human_mask_dataset = HumanMaskDataset(
-        root_dir=os.path.join(os.getcwd(), "training_data", "train"))
+    human_mask_dataset = HumanMaskDataset(root_dir=os.path.join(DATA_ROOT, "train"))
 
     final_metrics = train(
         args, model, discriminator, loader, val_loader,
