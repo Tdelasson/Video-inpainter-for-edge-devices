@@ -208,23 +208,12 @@ class Logger(object):
 def get_mask_for_iter(current_iter, total_iters, video_data,
                        mask_dataset, human_mask_dataset=None):
     progress = current_iter / total_iters
-    H, W = video_data.shape[3], video_data.shape[4]
 
     # After 70% of training, mix in human masks
     if human_mask_dataset is not None and progress > 0.70:
         return get_human_mask(video_data, human_mask_dataset)
 
-    # Arbitrary mask with growing size
-    min_frac = 0.10
-    max_frac = 0.40
-    current_max_frac = min_frac + progress * (max_frac - min_frac)
-    current_max_size = int(current_max_frac * min(H, W))
-    current_min_size = max(20, int(current_max_size * 0.3))
-
-    return generate_arbitrary_shape_mask(
-        video_data, mask_dataset,
-        size_range=(current_min_size, current_max_size)
-    )
+    return generate_arbitrary_shape_mask(video_data, mask_dataset)
 
 def train(args, model, discriminator, train_loader, val_loader, mask_dataset, val_mask_dataset, human_mask_dataset,
           optimizer_model, optimizer_disc, scheduler_model,

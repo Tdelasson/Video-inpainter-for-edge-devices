@@ -37,35 +37,19 @@ def generate_flying_square_mask(video: torch.Tensor) -> tuple[torch.Tensor, torc
     return masks
 
 
-def generate_arbitrary_shape_mask(video, mask_dataset: IrregularMaskDataset, size_range):
+def generate_arbitrary_shape_mask(video, mask_dataset: IrregularMaskDataset):
     B, T, C, H, W = video.shape
     device = video.device
     all_masks = []
-    min_size, max_size = size_range
 
     for b in range(B):
         max_start_idx = len(mask_dataset) - T
         start_idx = 0 if max_start_idx <= 0 else np.random.randint(0, max_start_idx)
 
-        # Pick a random size constraint for this specific batched sequence
-        target_size = np.random.randint(min_size, max_size + 1)
-
-        # Pick random placement coordinates
-        y1 = np.random.randint(0, H - target_size + 1) if H > target_size else 0
-        x1 = np.random.randint(0, W - target_size + 1) if W > target_size else 0
-
         video_masks = []
         for t in range(T):
-            mask = mask_dataset[start_idx + t].unsqueeze(0)  # (1, 1, H, W)
-
-            # Scale down the mask to the curriculum size
-            scaled_mask = F.interpolate(mask, size=(target_size, target_size), mode='nearest')
-
-            # Place the scaled mask onto an empty canvas of the original video size
-            canvas = torch.zeros((1, 1, H, W), device=mask.device)
-            canvas[:, :, y1:y1 + target_size, x1:x1 + target_size] = scaled_mask
-
-            video_masks.append(canvas.squeeze(0))  # Back to (1, H, W)
+            mask = mask_dataset[start_idx + t]
+            video_masks.append(mask)
 
         all_masks.append(torch.stack(video_masks))
 
