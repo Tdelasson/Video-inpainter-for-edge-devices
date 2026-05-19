@@ -32,10 +32,10 @@ def get_loss_weights(current_iter, total_iters, args):
     """Continuously scheduled loss weights — no discrete phase jumps."""
 
     # Warmup fraction for each loss
-    perc_warmup = 0.00  # perceptual active almost immediately
-    style_warmup = 0.00  # style follows shortly after
-    temp_warmup = 0.00  # temporal needs some spatial foundation first
-    adv_warmup = 0.00  # adversarial introduced once model is competent
+    perc_warmup = 0.05  # perceptual active almost immediately
+    style_warmup = 0.10  # style follows shortly after
+    temp_warmup = 0.20  # temporal needs some spatial foundation first
+    adv_warmup = 0.35  # adversarial introduced once model is competent
 
     def ramp(start_frac, end_frac=None, target=1.0):
         end_frac = end_frac or (start_frac + 0.20)
@@ -45,10 +45,10 @@ def get_loss_weights(current_iter, total_iters, args):
     return {
         "w_pixel_m": args.w_pixel_m,  # always on
         "w_pixel_f": args.w_pixel_f,  # always on
-        "w_perc": args.w_perc * 1, #ramp(perc_warmup),
-        "w_style": args.w_style * 1, # ramp(style_warmup),
-        "w_temp": args.w_temp * 1, #ramp(temp_warmup),
-        "w_adv": args.w_adv * 1 #ramp(adv_warmup),
+        "w_perc": args.w_perc * ramp(perc_warmup),
+        "w_style": args.w_style * ramp(style_warmup),
+        "w_temp": args.w_temp * ramp(temp_warmup),
+        "w_adv": args.w_adv * ramp(adv_warmup),
     }
 
 def parse_args():
@@ -395,11 +395,11 @@ def train(args, model, discriminator, train_loader, val_loader, mask_dataset, va
                     f"Adv: {adv.item():.4f}"
                 )
 
-            #if current_iter % 500 == 0:
-            #    print(f"Running validation at iteration {current_iter}...")
-            #    val_metrics = validate(args, model, val_loader, val_mask_dataset, human_mask_dataset, criterion, device,
-            #                          save_dir, current_iter)
-            #    print(f"Validation Metrics: {val_metrics}")
+            if current_iter % 500 == 0 and current_iter > 5000:
+                print(f"Running validation at iteration {current_iter}...")
+                val_metrics = validate(args, model, val_loader, val_mask_dataset, human_mask_dataset, criterion, device,
+                                      save_dir, current_iter)
+                print(f"Validation Metrics: {val_metrics}")
 
             current_iter += 1
 
