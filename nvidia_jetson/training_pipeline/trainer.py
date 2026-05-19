@@ -156,6 +156,9 @@ def validate(args, model, val_loader, val_mask_dataset, human_mask_dataset, crit
                 target = window[:, -1]
                 target_mask = masks_window[:, -1]
 
+                prev_frame = window[:, -2] if t > 0 else None
+                curr_frame = target if t > 0 else None
+
                 pixel_input = masked_window.reshape(B, args.seq_len * C, H, W)
                 mask_input = masks_window.reshape(B, args.seq_len, H, W)
                 full_input = torch.cat([pixel_input, mask_input], dim=1)
@@ -174,8 +177,10 @@ def validate(args, model, val_loader, val_mask_dataset, human_mask_dataset, crit
                 total_loss, l1_m, l1_f, _, _, _, _ = criterion(
                     output=output, target=target, mask=target_mask,
                     prev_output_gt=None,
-                    prev_output_model=None,
-                    discriminator=None, fake_seq=None
+                    prev_output_model=prev_composited,  # Pass previous frame configuration
+                    discriminator=None, fake_seq=None,
+                    prev_frame=prev_frame,  # Pass to RAFT
+                    curr_frame=curr_frame  # Pass to RAFT
                 )
 
                 mse = torch.mean((output * target_mask - target * target_mask) ** 2)
@@ -215,15 +220,21 @@ class Logger(object):
         self.terminal.flush()
         self.log.flush()
 
+
 def get_mask_for_iter(current_iter, total_iters, video_data,
-                       mask_dataset, human_mask_dataset=None):
+                      mask_dataset, human_mask_dataset=None):
     progress = current_iter / total_iters
 
-    # After 70% of training, mix in human masks
-    if human_mask_dataset is not None and progress > 0.70:
-        return get_human_mask(video_data, human_mask_dataset)
+    if human_mask_dataset is None:
+        return generate_arbitrary_shape_mask(video_data, mask_dataset)
 
-    return generate_arbitrary_shape_mask(video_data, mask_dataset)
+    # Pure foundational training (0% - 30%)
+    if progress <= 0.30:
+        return generate_arbitrary_shape_mask(video_data, mask_dataset)
+
+    # Pure Human Specialization (30% - 100%)
+    else:
+        return get_human_mask(video_data, human_mask_dataset)
 
 def train(args, model, discriminator, train_loader, val_loader, mask_dataset, val_mask_dataset, human_mask_dataset,
           optimizer_model, optimizer_disc, scheduler_model,
@@ -242,6 +253,8 @@ def train(args, model, discriminator, train_loader, val_loader, mask_dataset, va
     while current_iter < args.iterations:
         for data in train_loader:
             if current_iter >= args.iterations: break
+
+            weights = get_loss_weights(current_iter, args.iterations, args)
 
             if isinstance(data, dict) and "video" in data:
                 video_data = data["video"].float().to(device) / 255.0
@@ -292,6 +305,9 @@ def train(args, model, discriminator, train_loader, val_loader, mask_dataset, va
                 target = window[:, -1]
                 target_mask = masks_window[:, -1]
 
+                prev_frame = window[:, -2] if t > 0 else None
+                curr_frame = target if t > 0 else None
+
                 pixel_input = masked_window.reshape(B, args.seq_len * C, H, W)
                 mask_input = masks_window.reshape(B, args.seq_len, H, W)
                 full_input = torch.cat([pixel_input, mask_input], dim=1)
@@ -316,8 +332,6 @@ def train(args, model, discriminator, train_loader, val_loader, mask_dataset, va
                 all_fake_seqs.append(fake_seq.detach())
 
                 if current_iter > 0:
-                    weights = get_loss_weights(current_iter, args.iterations, args)
-
                     # Wrap criterion forward pass in autocast
                     with autocast("cuda"):
                         total_loss, l1_m, l1_f, perc_v, style_v, temp_v, adv = criterion(
@@ -326,7 +340,9 @@ def train(args, model, discriminator, train_loader, val_loader, mask_dataset, va
                             prev_output_model=prev_output_model,
                             discriminator=discriminator,
                             fake_seq=fake_seq,
-                            weight_overrides=weights
+                            weight_overrides=weights,
+                            prev_frame=prev_frame,
+                            curr_frame=curr_frame
                         )
 
                     accumulated_loss = accumulated_loss + (total_loss / total_t_steps)
@@ -342,7 +358,9 @@ def train(args, model, discriminator, train_loader, val_loader, mask_dataset, va
                             prev_output_model=prev_output_model,
                             discriminator=discriminator,
                             fake_seq=fake_seq,
-                            weight_overrides=weights  # Added this line
+                            weight_overrides=weights,
+                            prev_frame=prev_frame,
+                            curr_frame=curr_frame
                         )
 
                 with torch.no_grad():
@@ -364,7 +382,7 @@ def train(args, model, discriminator, train_loader, val_loader, mask_dataset, va
                 scheduler_model.step()
 
             # Discriminator step with scaler
-            if args.w_adv > 0 and all_real_seqs:
+            if weights["w_adv"] > 0 and all_real_seqs:
                 # Iterate sequentially to prevent OOM
                 for real_seq, fake_seq in zip(all_real_seqs, all_fake_seqs):
                     with autocast("cuda"):
