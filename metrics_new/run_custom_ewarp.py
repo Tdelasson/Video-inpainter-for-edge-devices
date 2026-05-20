@@ -9,22 +9,21 @@ import torch.nn.functional as F
 import numpy as np
 from PIL import Image
 
+from pathlib import Path
+
 PROPAINTER_PATH = "/home/sw66/Projects/Video-inpainter-for-edge-devices/Baselines_Repos/ProPainter-main"
+RAFT_PATH = os.path.join(PROPAINTER_PATH, "RAFT")
+
 if PROPAINTER_PATH not in sys.path:
     sys.path.insert(0, PROPAINTER_PATH)
+if RAFT_PATH not in sys.path:
+    sys.path.insert(0, RAFT_PATH)
 
+# Import RAFT from the root
 from RAFT import RAFT
 
-# Explicitly pull the padder utility using an absolute module import
-import importlib.util
-import os
-padder_spec = importlib.util.spec_from_file_location(
-    "propainter_utils",
-    os.path.join(PROPAINTER_PATH, "utils", "utils.py")
-)
-propainter_utils = importlib.util.module_from_spec(padder_spec)
-padder_spec.loader.exec_module(propainter_utils)
-InputPadder = propainter_utils.InputPadder
+# Import InputPadder cleanly from RAFT's dedicated core utilities folder
+from core.utils.utils import InputPadder
 
 
 def parse_args():
@@ -67,7 +66,7 @@ def main():
 
     flow_model = torch.nn.DataParallel(RAFT(RAFTArgs()))
     # Load ProPainter's bundled RAFT weights
-    raft_weights = "/home/sw66/Projects/Video-inpainter-for-edge-devices/Baselines_Repos/ProPainter-main/weights/raft- things.pth"
+    raft_weights = "/home/sw66/Projects/Video-inpainter-for-edge-devices/Baselines_Repos/ProPainter-main/weights/raft-things.pth"
     if os.path.exists(raft_weights):
         flow_model.load_state_dict(torch.load(raft_weights, map_location=device))
     flow_model = flow_model.module.to(device).eval()
