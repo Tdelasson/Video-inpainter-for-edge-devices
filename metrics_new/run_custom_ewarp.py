@@ -9,10 +9,22 @@ import torch.nn.functional as F
 import numpy as np
 from PIL import Image
 
-# Add ProPainter to path so we can import RAFT naturally
-sys.path.append("/home/sw66/Projects/Video-inpainter-for-edge-devices/Baselines_Repos/ProPainter-main")
+PROPAINTER_PATH = "/home/sw66/Projects/Video-inpainter-for-edge-devices/Baselines_Repos/ProPainter-main"
+if PROPAINTER_PATH not in sys.path:
+    sys.path.insert(0, PROPAINTER_PATH)
+
 from RAFT import RAFT
-from utils.utils import InputPadder  # ProPainter utility
+
+# Explicitly pull the padder utility using an absolute module import
+import importlib.util
+import os
+padder_spec = importlib.util.spec_from_file_location(
+    "propainter_utils",
+    os.path.join(PROPAINTER_PATH, "utils", "utils.py")
+)
+propainter_utils = importlib.util.module_from_spec(padder_spec)
+padder_spec.loader.exec_module(propainter_utils)
+InputPadder = propainter_utils.InputPadder
 
 
 def parse_args():
