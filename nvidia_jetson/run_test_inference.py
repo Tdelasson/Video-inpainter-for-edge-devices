@@ -56,7 +56,7 @@ def parse_args() -> argparse.Namespace:
         "--model",
         type=str,
         default="fuseformer_om",
-        choices=["fuseformer_om", "e2fgvi_hq", "propainter", "vinet", "viper", "opencv_inpaint", "constant_fill"],
+        #choices=["fuseformer_om", "e2fgvi_hq", "propainter", "vinet", "viper", "opencv_inpaint", "constant_fill"],
         help="Model adapter to run",
     )
     parser.add_argument(
@@ -206,7 +206,7 @@ def _build_adapter(args: argparse.Namespace, device: str):
         )
         return adapter, adapter.model_h, adapter.model_w
 
-    if model_key == "viper":
+    if model_key == "viper" or model_key.startswith("checkpoint"):
         weights_path = args.weights_path or DEFAULT_VIPER_WEIGHTS_PATH
         adapter = ViperAdapter(
             model_path=str(weights_path),
@@ -214,8 +214,7 @@ def _build_adapter(args: argparse.Namespace, device: str):
             seq_len=args.viper_seq_len,
             fp16=args.fp16,
         )
-        if not hasattr(adapter, "name"):
-            adapter.name = "viper"
+        adapter.name = args.model
         return adapter, getattr(adapter, "model_h", None), getattr(adapter, "model_w", None)
 
     if model_key == "opencv_inpaint":
@@ -233,7 +232,7 @@ def _build_adapter(args: argparse.Namespace, device: str):
 
 
 def _run_video_inpaint(adapter, model_key: str, frames: list[np.ndarray], masks: list[np.ndarray]) -> list[np.ndarray]:
-    if model_key != "viper":
+    if model_key != "viper" and not model_key.startswith("checkpoint"):
         return adapter.inpaint(frames, masks, resize_to_original=False)
 
     # Viper requires exactly seq_len frames. Repeat-pad with the first real frame
