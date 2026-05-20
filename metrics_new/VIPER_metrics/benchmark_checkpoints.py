@@ -30,12 +30,6 @@ def parse_args():
         help="Adapter key type to pass down to inference execution engine",
     )
     parser.add_argument(
-        "--fast-blind-root",
-        type=Path,
-        required=True,
-        help="Root path to the fast_blind repository for FWE calculations",
-    )
-    parser.add_argument(
         "--dataset",
         type=str,
         default="DAVIS",
