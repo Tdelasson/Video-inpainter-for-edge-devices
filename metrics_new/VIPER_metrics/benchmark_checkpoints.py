@@ -174,7 +174,7 @@ def main():
             "--mask-type", args.mask_type,
             "--frames-subdir", args.frames_subdir,
             "--device", args.device,
-            "--models", f"{rel_results_dir}/{model_tag}",
+            "--models", "../../metrics_new/VIPER_metrics/nvidia_jetson/JetsonResults",
             "--output-dir", f"{rel_outputs_dir}",
             "--i3d-weights", "/home/sw66/Projects/Video-inpainter-for-edge-devices/Baselines_Repos/pthFiles/ProPainter/i3d_rgb_imagenet.pt"
         ]
@@ -193,7 +193,7 @@ def main():
             "--copy-input" if idx == 1 else ""
         ]
         ewarp_cmd = [item for item in ewarp_cmd if item]
-        run_command(ewarp_cmd, nvidia_jetson_dir, f"Evaluating Temporal Consistency (FWE) for {model_tag}")
+        run_command(ewarp_cmd, metrics_dir, f"Evaluating Temporal Consistency (FWE) for {model_tag}")
 
         # TASK D: Consolidate data logs
         metric_file = None
