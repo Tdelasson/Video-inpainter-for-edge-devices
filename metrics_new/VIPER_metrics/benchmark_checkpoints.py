@@ -196,6 +196,7 @@ def main():
             "--models", model_tag,
             "--output-dir", f"{rel_outputs_dir}",
             "--copy-input" if idx == 1 else ""
+            "--cpu"
         ]
         ewarp_cmd = [item for item in ewarp_cmd if item]
         run_command(ewarp_cmd, metrics_dir, f"Evaluating Temporal Consistency (FWE) for {model_tag}")
