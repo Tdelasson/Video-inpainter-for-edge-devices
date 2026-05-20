@@ -159,13 +159,13 @@ def main():
         # TASK A: Run Test Inference Framework
         inference_cmd = [
             sys.executable, "run_test_inference.py",
-            "--model", args.model_type,
+            "--model", model_tag,
             "--splits", f"{args.dataset}:{args.mask_type}",
             "--frames-subdir", args.frames_subdir,
             "--weights-path", str(clean_weights_path),
             "--results-dir", str(custom_results_root)
         ]
-        
+
         if args.fp16:
             inference_cmd.append("--fp16")
 
