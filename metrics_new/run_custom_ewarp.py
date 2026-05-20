@@ -67,12 +67,22 @@ def main():
         small = False
         mixed_precision = False
 
-    flow_model = torch.nn.DataParallel(RAFT(RAFTArgs()))
-    # Load ProPainter's bundled RAFT weights
+    # Initialize RAFT directly without DataParallel
+    flow_model = RAFT(RAFTArgs())
+
     raft_weights = "/home/sw66/Projects/Video-inpainter-for-edge-devices/Baselines_Repos/ProPainter-main/weights/raft-things.pth"
     if os.path.exists(raft_weights):
-        flow_model.load_state_dict(torch.load(raft_weights, map_location=device))
-    flow_model = flow_model.module.to(device).eval()
+        # Cleanly strip out 'module.' prefix from weights if they were saved using DataParallel
+        state_dict = torch.load(raft_weights, map_location=device)
+        from collections import OrderedDict
+        new_state_dict = OrderedDict()
+        for k, v in state_dict.items():
+            name = k.replace("module.", "") if k.startswith("module.") else k
+            new_state_dict[name] = v
+
+        flow_model.load_state_dict(new_state_dict)
+
+    flow_model = flow_model.to(device).eval()
 
     # --- Setup directories ---
     repo_root = Path(__file__).resolve().parents[1]
@@ -111,6 +121,8 @@ def main():
                 # Read images into tensors
                 gt1 = torch.from_numpy(np.array(Image.open(gt1_p))).permute(2, 0, 1).float().unsqueeze(0).to(device)
                 gt2 = torch.from_numpy(np.array(Image.open(gt2_p))).permute(2, 0, 1).float().unsqueeze(0).to(device)
+
+                p1 = torch.from_numpy(np.array(Image.open(p1_p))).permute(2, 0, 1).float().unsqueeze(0).to(device)
                 p2 = torch.from_numpy(np.array(Image.open(p2_p))).permute(2, 0, 1).float().unsqueeze(0).to(device)
 
                 # Calculate Flow via native RAFT
@@ -123,8 +135,8 @@ def main():
                     # Warp prediction 2 backward to match prediction 1 context
                     warped_p2 = warp_frame(p2, flow)
 
-                    # Compute MSE Warp Error
-                    mse = F.mse_loss(warped_p2, p2).item()
+                    # Compute MSE Warp Error against p1 (True consistency check)
+                    mse = F.mse_loss(warped_p2, p1).item()
                     accumulated_mse += mse
                     count += 1
 
