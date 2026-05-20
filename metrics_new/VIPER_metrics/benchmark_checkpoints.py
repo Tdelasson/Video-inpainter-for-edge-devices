@@ -182,7 +182,7 @@ def main():
 
         # TASK C: Compute Modern Native Warping Error Matrix (FWE)
         ewarp_cmd = [
-            sys.executable, "run_modern_ewarp.py",
+            sys.executable, "run_custom_ewarp.py",
             "--dataset", args.dataset,
             "--mask-type", args.mask_type,
             "--frames-subdir", args.frames_subdir,
