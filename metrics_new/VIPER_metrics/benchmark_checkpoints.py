@@ -156,15 +156,16 @@ def main():
         if target_eval_pred_dir.exists():
             shutil.rmtree(target_eval_pred_dir)
 
-        # TASK A: Run Test Inference Framework (pointing dynamically to our clean paths)
+        # TASK A: Run Test Inference Framework
         inference_cmd = [
             sys.executable, "run_test_inference.py",
             "--model", args.model_type,
             "--splits", f"{args.dataset}:{args.mask_type}",
             "--frames-subdir", args.frames_subdir,
             "--weights-path", str(clean_weights_path),
-            "--results-dir", str(target_eval_pred_dir)
+            "--results-dir", str(custom_results_root)
         ]
+        
         if args.fp16:
             inference_cmd.append("--fp16")
 
