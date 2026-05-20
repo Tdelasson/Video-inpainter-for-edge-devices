@@ -97,8 +97,10 @@ def main():
     print(f"🎯 Verified nvidia_jetson directory at: {nvidia_jetson_dir}")
 
     # Establish benchmarking outputs cleanly within your current VIPER_metrics workspace
-    results_dir_name = "JetsonResults"
-    custom_results_root = viper_metrics_dir / "nvidia_jetson" / results_dir_name
+    # NOTE: run_metrics_new.py defaults to checking 'Results'. If your workspace metrics pipeline
+    # relies on default structure, we match that folder name context directly.
+    results_dir_name = "Results"
+    custom_results_root = nvidia_jetson_dir / results_dir_name
     outputs_dir = viper_metrics_dir / "outputs"
     final_report_dir = viper_metrics_dir / "benchmark_reports"
 
@@ -122,7 +124,6 @@ def main():
     print(f"Found {len(checkpoints)} checkpoints for evaluation benchmarking pipeline.")
 
     # Calculate paths relative to where the commands will be running (nvidia_jetson_dir)
-    rel_results_dir = os.path.relpath(custom_results_root, nvidia_jetson_dir)
     rel_outputs_dir = os.path.relpath(outputs_dir, nvidia_jetson_dir)
 
     # Iterate over checkpoints
@@ -149,18 +150,20 @@ def main():
         torch.save(clean_weights, clean_weights_path)
         # ---------------------------------------------
 
-        run_results_path = custom_results_root / model_tag
-        if run_results_path.exists():
-            shutil.rmtree(run_results_path)
+        # Target directory where this specific checkpoint's frames go
+        target_eval_pred_dir = custom_results_root / model_tag / args.dataset / args.mask_type / "_official_eval_pred"
 
-        # TASK A: Run Test Inference Framework (pointing to our clean parsed weights)
+        if target_eval_pred_dir.exists():
+            shutil.rmtree(target_eval_pred_dir)
+
+        # TASK A: Run Test Inference Framework (pointing dynamically to our clean paths)
         inference_cmd = [
             sys.executable, "run_test_inference.py",
             "--model", args.model_type,
             "--splits", f"{args.dataset}:{args.mask_type}",
             "--frames-subdir", args.frames_subdir,
             "--weights-path", str(clean_weights_path),
-            "--results-dir", f"/home/sw66/Projects/Video-inpainter-for-edge-devices/nvidia_jetson/Results/{model_tag}/{args.dataset}/{args.mask_type}/_official_eval_pred"
+            "--results-dir", str(target_eval_pred_dir)
         ]
         if args.fp16:
             inference_cmd.append("--fp16")
@@ -176,7 +179,8 @@ def main():
             "--device", args.device,
             "--models", model_tag,
             "--output-dir", f"{rel_outputs_dir}",
-            "--i3d-weights", "/home/sw66/Projects/Video-inpainter-for-edge-devices/Baselines_Repos/pthFiles/ProPainter/i3d_rgb_imagenet.pt"
+            "--i3d-weights",
+            "/home/sw66/Projects/Video-inpainter-for-edge-devices/Baselines_Repos/pthFiles/ProPainter/i3d_rgb_imagenet.pt"
         ]
         metrics_dir = nvidia_jetson_dir.parent / "metrics_new"
         run_command(metrics_cmd, metrics_dir, f"Extracting PSNR, SSIM, & VFID for {model_tag}")
