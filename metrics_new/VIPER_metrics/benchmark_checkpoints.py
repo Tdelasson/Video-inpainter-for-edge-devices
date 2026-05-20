@@ -186,20 +186,16 @@ def main():
         metrics_dir = nvidia_jetson_dir.parent / "metrics_new"
         run_command(metrics_cmd, metrics_dir, f"Extracting PSNR, SSIM, & VFID for {model_tag}")
 
-        # TASK C: Compute Fast Blind Warping Error Matrix (FWE)
+        # TASK C: Compute Modern Native Warping Error Matrix (FWE)
         ewarp_cmd = [
-            sys.executable, "run_fast_blind_ewarp.py",
-            "--fast-blind-root", str(args.fast_blind_root),
+            sys.executable, "run_modern_ewarp.py",
             "--dataset", args.dataset,
             "--mask-type", args.mask_type,
             "--frames-subdir", args.frames_subdir,
             "--models", model_tag,
-            "--output-dir", f"{rel_outputs_dir}",
-            "--copy-input" if idx == 1 else ""
-            "--cpu"
+            "--output-dir", f"{rel_outputs_dir}"
         ]
-        ewarp_cmd = [item for item in ewarp_cmd if item]
-        run_command(ewarp_cmd, metrics_dir, f"Evaluating Temporal Consistency (FWE) for {model_tag}")
+        run_command(ewarp_cmd, metrics_dir, f"Evaluating Temporal Consistency (FWE via RAFT) for {model_tag}")
 
         # TASK D: Consolidate data logs
         metric_file = None
