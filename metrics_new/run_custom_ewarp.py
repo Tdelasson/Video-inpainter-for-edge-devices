@@ -61,18 +61,17 @@ def main():
     args = parse_args()
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    # Initialize RAFT flow model from ProPainter's assets
-    # Using dummy args matching RAFT specifications
-    class RAFTArgs:
-        small = False
-        mixed_precision = False
+    import argparse
+    raft_args = argparse.Namespace()
+    raft_args.small = False
+    raft_args.mixed_precision = False
+    raft_args.dropout = 0.0  # RAFT looks for dropout settings internally!
 
-    # Initialize RAFT directly without DataParallel
-    flow_model = RAFT(RAFTArgs())
+    # Initialize RAFT with the genuine namespace object
+    flow_model = RAFT(raft_args)
 
     raft_weights = "/home/sw66/Projects/Video-inpainter-for-edge-devices/Baselines_Repos/ProPainter-main/weights/raft-things.pth"
     if os.path.exists(raft_weights):
-        # Cleanly strip out 'module.' prefix from weights if they were saved using DataParallel
         state_dict = torch.load(raft_weights, map_location=device)
         from collections import OrderedDict
         new_state_dict = OrderedDict()
