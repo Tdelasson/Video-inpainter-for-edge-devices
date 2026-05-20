@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 Automated Video Inpainting Benchmark Script.
-Runs scripts out of nvidia_jetson in FP32 mode to evaluate raw .pth files.
+Automatically extracts nested 'model_state' dictionaries from training
+checkpoints to prevent PyTorch state_dict loading crashes.
 """
 
 import argparse
@@ -11,6 +12,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+import torch  # Added to unpack the state dictionaries on the fly
 
 
 def parse_args():
@@ -95,8 +97,12 @@ def main():
     outputs_dir = viper_metrics_dir / "outputs"
     final_report_dir = viper_metrics_dir / "benchmark_reports"
 
+    # Directory to place clean unpacked weights temporary files
+    tmp_weights_dir = viper_metrics_dir / "tmp_unpacked_weights"
+
     final_report_dir.mkdir(parents=True, exist_ok=True)
     outputs_dir.mkdir(parents=True, exist_ok=True)
+    tmp_weights_dir.mkdir(parents=True, exist_ok=True)
 
     # Get absolute path for checkpoints directory
     absolute_ckpt_dir = args.checkpoint_dir.resolve()
@@ -121,17 +127,34 @@ def main():
         print(f" PROCESSING CHECKPOINT [{idx}/{len(checkpoints)}]: {model_tag}")
         print(f"=======================================================")
 
+        # --- AUTO-EXTRACT NESTED MODEL STATE-DICTS ---
+        print(f"🔧 Analyzing state dictionary structure for {ckpt_path.name}...")
+        checkpoint_dict = torch.load(ckpt_path, map_location="cpu")
+
+        # Check if it's a bundled checkpoint dictionary or raw weights
+        if isinstance(checkpoint_dict, dict) and "model_state" in checkpoint_dict:
+            print("💡 Found nested 'model_state' key. Extracting pure network weights layer keys...")
+            clean_weights = checkpoint_dict["model_state"]
+        else:
+            print("✅ File structure appears to be direct raw weights already.")
+            clean_weights = checkpoint_dict
+
+        # Write clean pure file to our temporary location
+        clean_weights_path = tmp_weights_dir / f"clean_{model_tag}.pth"
+        torch.save(clean_weights, clean_weights_path)
+        # ---------------------------------------------
+
         run_results_path = custom_results_root / model_tag
         if run_results_path.exists():
             shutil.rmtree(run_results_path)
 
-        # TASK A: Run Test Inference Framework 
+        # TASK A: Run Test Inference Framework (pointing to our clean parsed weights)
         inference_cmd = [
             sys.executable, "run_test_inference.py",
             "--model", args.model_type,
             "--splits", f"{args.dataset}:{args.mask_type}",
             "--frames-subdir", args.frames_subdir,
-            "--weights-path", str(ckpt_path),
+            "--weights-path", str(clean_weights_path),
             "--results-dir", f"{rel_results_dir}/{model_tag}"
         ]
         run_command(inference_cmd, nvidia_jetson_dir, f"Running Inference for {model_tag}")
@@ -180,6 +203,11 @@ def main():
                     f"| Model: {model_tag} | PSNR: {summary_data.get('psnr')} | SSIM: {summary_data.get('ssim')} | VFID: {summary_data.get('vfid')} |")
         else:
             print(f" [Warning]: Target evaluation payload missing for {model_tag} in outputs/ folder.", file=sys.stderr)
+
+    # Clean up temporary parsed weights folder when finished
+    if tmp_weights_dir.exists():
+        shutil.rmtree(tmp_weights_dir)
+        print("\n🧹 Cleaned up temporary unpacked weight instances.")
 
     print("\n Benchmarking process complete. Final ledgers archived inside 'benchmark_reports/'.")
 
