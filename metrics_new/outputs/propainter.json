@@ -1,0 +1,321 @@
+{
+  "model": "propainter",
+  "dataset": "DAVIS",
+  "mask_type": "synthetic",
+  "frames_subdir": "JPEGImages_432_240",
+  "masks_subdir": "SyntheticMasks",
+  "eval_size": null,
+  "num_videos": 50,
+  "psnr": 35.2523,
+  "ssim": 0.9793,
+  "vfid": 0.4146,
+  "ewarp": null,
+  "ewarp_x1e2": null,
+  "speed": {
+    "fps": 1.6334,
+    "latency_ms": 612.7568,
+    "peak_memory_mb": 2419.76
+  },
+  "per_video": [
+    {
+      "video": "bear",
+      "num_frames": 82,
+      "psnr": 33.862,
+      "ssim": 0.9898
+    },
+    {
+      "video": "blackswan",
+      "num_frames": 50,
+      "psnr": 32.3995,
+      "ssim": 0.9631
+    },
+    {
+      "video": "bmx-bumps",
+      "num_frames": 90,
+      "psnr": 40.7326,
+      "ssim": 0.9948
+    },
+    {
+      "video": "bmx-trees",
+      "num_frames": 80,
+      "psnr": 45.2324,
+      "ssim": 0.9989
+    },
+    {
+      "video": "boat",
+      "num_frames": 75,
+      "psnr": 28.0182,
+      "ssim": 0.9425
+    },
+    {
+      "video": "breakdance",
+      "num_frames": 84,
+      "psnr": 26.5084,
+      "ssim": 0.9587
+    },
+    {
+      "video": "breakdance-flare",
+      "num_frames": 71,
+      "psnr": 30.9679,
+      "ssim": 0.9673
+    },
+    {
+      "video": "bus",
+      "num_frames": 80,
+      "psnr": 36.0471,
+      "ssim": 0.9955
+    },
+    {
+      "video": "camel",
+      "num_frames": 90,
+      "psnr": 26.2865,
+      "ssim": 0.9275
+    },
+    {
+      "video": "car-roundabout",
+      "num_frames": 75,
+      "psnr": 42.4368,
+      "ssim": 0.9992
+    },
+    {
+      "video": "car-shadow",
+      "num_frames": 40,
+      "psnr": 50.0323,
+      "ssim": 0.9974
+    },
+    {
+      "video": "car-turn",
+      "num_frames": 80,
+      "psnr": 35.2548,
+      "ssim": 0.9868
+    },
+    {
+      "video": "cows",
+      "num_frames": 104,
+      "psnr": 28.6341,
+      "ssim": 0.9827
+    },
+    {
+      "video": "dance-jump",
+      "num_frames": 60,
+      "psnr": 34.3935,
+      "ssim": 0.9767
+    },
+    {
+      "video": "dance-twirl",
+      "num_frames": 90,
+      "psnr": 32.164,
+      "ssim": 0.9859
+    },
+    {
+      "video": "dog",
+      "num_frames": 60,
+      "psnr": 38.2564,
+      "ssim": 0.9858
+    },
+    {
+      "video": "dog-agility",
+      "num_frames": 25,
+      "psnr": 25.0496,
+      "ssim": 0.9374
+    },
+    {
+      "video": "drift-chicane",
+      "num_frames": 52,
+      "psnr": 33.1417,
+      "ssim": 0.9448
+    },
+    {
+      "video": "drift-straight",
+      "num_frames": 50,
+      "psnr": 36.6219,
+      "ssim": 0.9932
+    },
+    {
+      "video": "drift-turn",
+      "num_frames": 64,
+      "psnr": 35.4431,
+      "ssim": 0.9918
+    },
+    {
+      "video": "elephant",
+      "num_frames": 80,
+      "psnr": 36.9522,
+      "ssim": 0.9922
+    },
+    {
+      "video": "flamingo",
+      "num_frames": 80,
+      "psnr": 36.3699,
+      "ssim": 0.99
+    },
+    {
+      "video": "goat",
+      "num_frames": 90,
+      "psnr": 33.3044,
+      "ssim": 0.9806
+    },
+    {
+      "video": "hike",
+      "num_frames": 80,
+      "psnr": 40.3523,
+      "ssim": 0.9943
+    },
+    {
+      "video": "hockey",
+      "num_frames": 75,
+      "psnr": 44.7312,
+      "ssim": 0.9938
+    },
+    {
+      "video": "horsejump-high",
+      "num_frames": 50,
+      "psnr": 27.0309,
+      "ssim": 0.9602
+    },
+    {
+      "video": "horsejump-low",
+      "num_frames": 60,
+      "psnr": 31.1189,
+      "ssim": 0.9691
+    },
+    {
+      "video": "kite-surf",
+      "num_frames": 50,
+      "psnr": 36.2716,
+      "ssim": 0.9876
+    },
+    {
+      "video": "kite-walk",
+      "num_frames": 80,
+      "psnr": 45.2069,
+      "ssim": 0.9963
+    },
+    {
+      "video": "libby",
+      "num_frames": 49,
+      "psnr": 46.5972,
+      "ssim": 0.9978
+    },
+    {
+      "video": "lucia",
+      "num_frames": 70,
+      "psnr": 33.5042,
+      "ssim": 0.9867
+    },
+    {
+      "video": "mallard-fly",
+      "num_frames": 70,
+      "psnr": 33.263,
+      "ssim": 0.9646
+    },
+    {
+      "video": "mallard-water",
+      "num_frames": 80,
+      "psnr": 31.1341,
+      "ssim": 0.959
+    },
+    {
+      "video": "motocross-bumps",
+      "num_frames": 60,
+      "psnr": 38.4855,
+      "ssim": 0.9864
+    },
+    {
+      "video": "motocross-jump",
+      "num_frames": 40,
+      "psnr": 34.1456,
+      "ssim": 0.979
+    },
+    {
+      "video": "motorbike",
+      "num_frames": 43,
+      "psnr": 40.4731,
+      "ssim": 0.9957
+    },
+    {
+      "video": "paragliding",
+      "num_frames": 70,
+      "psnr": 41.616,
+      "ssim": 0.9891
+    },
+    {
+      "video": "paragliding-launch",
+      "num_frames": 80,
+      "psnr": 43.0109,
+      "ssim": 0.9953
+    },
+    {
+      "video": "parkour",
+      "num_frames": 100,
+      "psnr": 28.6705,
+      "ssim": 0.9544
+    },
+    {
+      "video": "rhino",
+      "num_frames": 90,
+      "psnr": 27.2003,
+      "ssim": 0.9582
+    },
+    {
+      "video": "rollerblade",
+      "num_frames": 35,
+      "psnr": 28.6438,
+      "ssim": 0.9507
+    },
+    {
+      "video": "scooter-black",
+      "num_frames": 43,
+      "psnr": 36.4813,
+      "ssim": 0.9961
+    },
+    {
+      "video": "scooter-gray",
+      "num_frames": 75,
+      "psnr": 30.3747,
+      "ssim": 0.9774
+    },
+    {
+      "video": "soapbox",
+      "num_frames": 99,
+      "psnr": 42.6092,
+      "ssim": 0.9972
+    },
+    {
+      "video": "soccerball",
+      "num_frames": 48,
+      "psnr": 24.6912,
+      "ssim": 0.9432
+    },
+    {
+      "video": "stroller",
+      "num_frames": 91,
+      "psnr": 33.9518,
+      "ssim": 0.9868
+    },
+    {
+      "video": "surf",
+      "num_frames": 55,
+      "psnr": 40.2927,
+      "ssim": 0.9923
+    },
+    {
+      "video": "swing",
+      "num_frames": 60,
+      "psnr": 36.8607,
+      "ssim": 0.9902
+    },
+    {
+      "video": "tennis",
+      "num_frames": 70,
+      "psnr": 40.7474,
+      "ssim": 0.9912
+    },
+    {
+      "video": "train",
+      "num_frames": 80,
+      "psnr": 30.0561,
+      "ssim": 0.9634
+    }
+  ]
+}
