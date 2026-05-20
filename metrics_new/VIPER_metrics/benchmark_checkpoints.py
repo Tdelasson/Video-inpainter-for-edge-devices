@@ -160,7 +160,7 @@ def main():
             "--splits", f"{args.dataset}:{args.mask_type}",
             "--frames-subdir", args.frames_subdir,
             "--weights-path", str(clean_weights_path),
-            "--results-dir", f"{rel_results_dir}/{model_tag}"
+            "--results-dir", f"/home/sw66/Projects/Video-inpainter-for-edge-devices/nvidia_jetson/Results/{model_tag}/{args.dataset}/{args.mask_type}/_official_eval_pred"
         ]
         if args.fp16:
             inference_cmd.append("--fp16")
