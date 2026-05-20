@@ -174,7 +174,7 @@ def main():
             "--mask-type", args.mask_type,
             "--frames-subdir", args.frames_subdir,
             "--device", args.device,
-            "--models", f"../../../../..{nvidia_jetson_dir}/JetsonResults/{model_tag}",
+            "--models", model_tag,
             "--output-dir", f"{rel_outputs_dir}",
             "--i3d-weights", "/home/sw66/Projects/Video-inpainter-for-edge-devices/Baselines_Repos/pthFiles/ProPainter/i3d_rgb_imagenet.pt"
         ]
@@ -184,11 +184,11 @@ def main():
         # TASK C: Compute Fast Blind Warping Error Matrix (FWE)
         ewarp_cmd = [
             sys.executable, "run_fast_blind_ewarp.py",
-            "--fast-blind-root", str(metrics_dir),
+            "--fast-blind-root", str(args.fast_blind_root),
             "--dataset", args.dataset,
             "--mask-type", args.mask_type,
             "--frames-subdir", args.frames_subdir,
-            "--models", f"{rel_results_dir}/{model_tag}",
+            "--models", model_tag,
             "--output-dir", f"{rel_outputs_dir}",
             "--copy-input" if idx == 1 else ""
         ]
