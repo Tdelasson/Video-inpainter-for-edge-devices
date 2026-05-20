@@ -17,8 +17,8 @@ if PROPAINTER_PATH not in sys.path:
     sys.path.insert(0, PROPAINTER_PATH)
 from RAFT import RAFT
 
-# 2. Directly target and load InputPadder from its exact file location
-padder_file_path = os.path.join(PROPAINTER_PATH, "RAFT", "core", "utils", "utils.py")
+# 2. Directly target and load InputPadder from the true path found on your SSD
+padder_file_path = os.path.join(PROPAINTER_PATH, "RAFT", "utils", "utils.py")  # <-- Fixed path (removed 'core')
 
 spec = importlib.util.spec_from_file_location("raft_core_utils", padder_file_path)
 raft_core_utils = importlib.util.module_from_spec(spec)
