@@ -175,7 +175,8 @@ def main():
             "--frames-subdir", args.frames_subdir,
             "--device", args.device,
             "--models", f"{rel_results_dir}/{model_tag}",
-            "--output-dir", f"{rel_outputs_dir}"
+            "--output-dir", f"{rel_outputs_dir}",
+            "--i3d-weights", "/home/sw66/Projects/Video-inpainter-for-edge-devices/Baselines_Repos/pthFiles/ProPainter/i3d_rgb_imagenet.pt"
         ]
         metrics_dir = nvidia_jetson_dir.parent / "metrics_new"
         run_command(metrics_cmd, metrics_dir, f"Extracting PSNR, SSIM, & VFID for {model_tag}")
