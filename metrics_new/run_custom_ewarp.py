@@ -1,29 +1,32 @@
-#!/usr/bin/env python3
 import os
 import sys
 import argparse
 import json
-from pathlib import Path
 import torch
 import torch.nn.functional as F
 import numpy as np
 from PIL import Image
-
+import importlib.util
 from pathlib import Path
 
+# Absolute root path to ProPainter
 PROPAINTER_PATH = "/home/sw66/Projects/Video-inpainter-for-edge-devices/Baselines_Repos/ProPainter-main"
-RAFT_PATH = os.path.join(PROPAINTER_PATH, "RAFT")
 
+# 1. Force add ProPainter to sys.path so RAFT can find its internal siblings
 if PROPAINTER_PATH not in sys.path:
     sys.path.insert(0, PROPAINTER_PATH)
-if RAFT_PATH not in sys.path:
-    sys.path.insert(0, RAFT_PATH)
-
-# Import RAFT from the root
 from RAFT import RAFT
 
-# Import InputPadder cleanly from RAFT's dedicated core utilities folder
-from core.utils.utils import InputPadder
+# 2. Directly target and load InputPadder from its exact file location
+padder_file_path = os.path.join(PROPAINTER_PATH, "RAFT", "core", "utils", "utils.py")
+
+spec = importlib.util.spec_from_file_location("raft_core_utils", padder_file_path)
+raft_core_utils = importlib.util.module_from_spec(spec)
+sys.modules["raft_core_utils"] = raft_core_utils
+spec.loader.exec_module(raft_core_utils)
+
+# Extract the InputPadder class directly
+InputPadder = raft_core_utils.InputPadder
 
 
 def parse_args():
