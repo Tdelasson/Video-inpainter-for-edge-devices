@@ -1,0 +1,324 @@
+{
+  "model": "E2FGVI_HQ",
+  "dataset": "DAVIS",
+  "mask_type": "synthetic",
+  "frames_subdir": "JPEGImages_432_240",
+  "masks_subdir": "SyntheticMasks",
+  "eval_size": {
+    "width": 432,
+    "height": 240
+  },
+  "num_videos": 50,
+  "psnr": 34.3089,
+  "ssim": 0.9761,
+  "vfid": 0.4256,
+  "ewarp": null,
+  "ewarp_x1e2": null,
+  "speed": {
+    "fps": null,
+    "latency_ms": null,
+    "peak_memory_mb": null
+  },
+  "per_video": [
+    {
+      "video": "bear",
+      "num_frames": 82,
+      "psnr": 33.8666,
+      "ssim": 0.9904
+    },
+    {
+      "video": "blackswan",
+      "num_frames": 50,
+      "psnr": 32.2001,
+      "ssim": 0.9618
+    },
+    {
+      "video": "bmx-bumps",
+      "num_frames": 90,
+      "psnr": 37.6844,
+      "ssim": 0.9904
+    },
+    {
+      "video": "bmx-trees",
+      "num_frames": 80,
+      "psnr": 42.9241,
+      "ssim": 0.998
+    },
+    {
+      "video": "boat",
+      "num_frames": 75,
+      "psnr": 28.8817,
+      "ssim": 0.9566
+    },
+    {
+      "video": "breakdance",
+      "num_frames": 84,
+      "psnr": 26.2162,
+      "ssim": 0.9557
+    },
+    {
+      "video": "breakdance-flare",
+      "num_frames": 71,
+      "psnr": 30.4526,
+      "ssim": 0.9633
+    },
+    {
+      "video": "bus",
+      "num_frames": 80,
+      "psnr": 36.1619,
+      "ssim": 0.996
+    },
+    {
+      "video": "camel",
+      "num_frames": 90,
+      "psnr": 26.8248,
+      "ssim": 0.9345
+    },
+    {
+      "video": "car-roundabout",
+      "num_frames": 75,
+      "psnr": 40.2618,
+      "ssim": 0.9987
+    },
+    {
+      "video": "car-shadow",
+      "num_frames": 40,
+      "psnr": 49.0863,
+      "ssim": 0.9967
+    },
+    {
+      "video": "car-turn",
+      "num_frames": 80,
+      "psnr": 33.693,
+      "ssim": 0.9805
+    },
+    {
+      "video": "cows",
+      "num_frames": 104,
+      "psnr": 31.4003,
+      "ssim": 0.9903
+    },
+    {
+      "video": "dance-jump",
+      "num_frames": 60,
+      "psnr": 33.7926,
+      "ssim": 0.9731
+    },
+    {
+      "video": "dance-twirl",
+      "num_frames": 90,
+      "psnr": 30.8113,
+      "ssim": 0.982
+    },
+    {
+      "video": "dog",
+      "num_frames": 60,
+      "psnr": 36.0938,
+      "ssim": 0.9759
+    },
+    {
+      "video": "dog-agility",
+      "num_frames": 25,
+      "psnr": 24.4766,
+      "ssim": 0.9295
+    },
+    {
+      "video": "drift-chicane",
+      "num_frames": 52,
+      "psnr": 32.8044,
+      "ssim": 0.9419
+    },
+    {
+      "video": "drift-straight",
+      "num_frames": 50,
+      "psnr": 31.5744,
+      "ssim": 0.977
+    },
+    {
+      "video": "drift-turn",
+      "num_frames": 64,
+      "psnr": 33.2472,
+      "ssim": 0.9866
+    },
+    {
+      "video": "elephant",
+      "num_frames": 80,
+      "psnr": 36.7045,
+      "ssim": 0.9921
+    },
+    {
+      "video": "flamingo",
+      "num_frames": 80,
+      "psnr": 36.7121,
+      "ssim": 0.9905
+    },
+    {
+      "video": "goat",
+      "num_frames": 90,
+      "psnr": 32.7525,
+      "ssim": 0.9796
+    },
+    {
+      "video": "hike",
+      "num_frames": 80,
+      "psnr": 40.2734,
+      "ssim": 0.9938
+    },
+    {
+      "video": "hockey",
+      "num_frames": 75,
+      "psnr": 45.2315,
+      "ssim": 0.994
+    },
+    {
+      "video": "horsejump-high",
+      "num_frames": 50,
+      "psnr": 25.4476,
+      "ssim": 0.9463
+    },
+    {
+      "video": "horsejump-low",
+      "num_frames": 60,
+      "psnr": 30.1075,
+      "ssim": 0.9636
+    },
+    {
+      "video": "kite-surf",
+      "num_frames": 50,
+      "psnr": 36.4112,
+      "ssim": 0.9871
+    },
+    {
+      "video": "kite-walk",
+      "num_frames": 80,
+      "psnr": 44.4605,
+      "ssim": 0.9961
+    },
+    {
+      "video": "libby",
+      "num_frames": 49,
+      "psnr": 45.0175,
+      "ssim": 0.9969
+    },
+    {
+      "video": "lucia",
+      "num_frames": 70,
+      "psnr": 33.4738,
+      "ssim": 0.9863
+    },
+    {
+      "video": "mallard-fly",
+      "num_frames": 70,
+      "psnr": 31.14,
+      "ssim": 0.9433
+    },
+    {
+      "video": "mallard-water",
+      "num_frames": 80,
+      "psnr": 31.0486,
+      "ssim": 0.9588
+    },
+    {
+      "video": "motocross-bumps",
+      "num_frames": 60,
+      "psnr": 36.6238,
+      "ssim": 0.9789
+    },
+    {
+      "video": "motocross-jump",
+      "num_frames": 40,
+      "psnr": 31.6264,
+      "ssim": 0.9642
+    },
+    {
+      "video": "motorbike",
+      "num_frames": 43,
+      "psnr": 39.7214,
+      "ssim": 0.9945
+    },
+    {
+      "video": "paragliding",
+      "num_frames": 70,
+      "psnr": 40.4205,
+      "ssim": 0.9862
+    },
+    {
+      "video": "paragliding-launch",
+      "num_frames": 80,
+      "psnr": 41.0822,
+      "ssim": 0.9922
+    },
+    {
+      "video": "parkour",
+      "num_frames": 100,
+      "psnr": 27.8205,
+      "ssim": 0.943
+    },
+    {
+      "video": "rhino",
+      "num_frames": 90,
+      "psnr": 27.087,
+      "ssim": 0.9574
+    },
+    {
+      "video": "rollerblade",
+      "num_frames": 35,
+      "psnr": 28.246,
+      "ssim": 0.9471
+    },
+    {
+      "video": "scooter-black",
+      "num_frames": 43,
+      "psnr": 33.7564,
+      "ssim": 0.993
+    },
+    {
+      "video": "scooter-gray",
+      "num_frames": 75,
+      "psnr": 28.3136,
+      "ssim": 0.964
+    },
+    {
+      "video": "soapbox",
+      "num_frames": 99,
+      "psnr": 40.4113,
+      "ssim": 0.9963
+    },
+    {
+      "video": "soccerball",
+      "num_frames": 48,
+      "psnr": 24.3893,
+      "ssim": 0.9426
+    },
+    {
+      "video": "stroller",
+      "num_frames": 91,
+      "psnr": 32.7417,
+      "ssim": 0.9826
+    },
+    {
+      "video": "surf",
+      "num_frames": 55,
+      "psnr": 39.5159,
+      "ssim": 0.9899
+    },
+    {
+      "video": "swing",
+      "num_frames": 60,
+      "psnr": 34.9437,
+      "ssim": 0.9835
+    },
+    {
+      "video": "tennis",
+      "num_frames": 70,
+      "psnr": 38.7462,
+      "ssim": 0.9894
+    },
+    {
+      "video": "train",
+      "num_frames": 80,
+      "psnr": 28.063,
+      "ssim": 0.945
+    }
+  ]
+}
