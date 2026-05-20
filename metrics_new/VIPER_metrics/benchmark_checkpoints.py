@@ -61,6 +61,11 @@ def parse_args():
         choices=["cuda", "cpu"],
         help="Hardware calculation accelerator context target",
     )
+    parser.add_argument(
+        "--fp16",
+        action="store_true",
+        help="Pass down half-precision context execution flags to inference adapter",
+    )
     return parser.parse_args()
 
 
@@ -157,6 +162,9 @@ def main():
             "--weights-path", str(clean_weights_path),
             "--results-dir", f"{rel_results_dir}/{model_tag}"
         ]
+        if args.fp16:
+            inference_cmd.append("--fp16")
+
         run_command(inference_cmd, nvidia_jetson_dir, f"Running Inference for {model_tag}")
 
         # TASK B: Run Spatial/Perceptual Metrics (PSNR, SSIM, VFID)
