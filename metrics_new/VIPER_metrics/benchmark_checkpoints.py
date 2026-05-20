@@ -169,7 +169,8 @@ def main():
             "--models", f"{rel_results_dir}/{model_tag}",
             "--output-dir", f"{rel_outputs_dir}"
         ]
-        run_command(metrics_cmd, nvidia_jetson_dir, f"Extracting PSNR, SSIM, & VFID for {model_tag}")
+        metrics_dir = nvidia_jetson_dir.parent / "metrics_new"
+        run_command(metrics_cmd, metrics_dir, f"Extracting PSNR, SSIM, & VFID for {model_tag}")
 
         # TASK C: Compute Fast Blind Warping Error Matrix (FWE)
         ewarp_cmd = [
