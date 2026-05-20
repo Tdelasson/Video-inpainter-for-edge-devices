@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
 Automated Video Inpainting Benchmark Script.
-Tailored for executing from metrics_new/VIPER_metrics while running scripts
-located two folders up inside the nvidia_jetson directory.
+Runs scripts out of nvidia_jetson in FP32 mode to evaluate raw .pth files.
 """
 
 import argparse
@@ -112,7 +111,6 @@ def main():
     print(f"Found {len(checkpoints)} checkpoints for evaluation benchmarking pipeline.")
 
     # Calculate paths relative to where the commands will be running (nvidia_jetson_dir)
-    # This ensures scripts running in nvidia_jetson find your outputs folder perfectly
     rel_results_dir = os.path.relpath(custom_results_root, nvidia_jetson_dir)
     rel_outputs_dir = os.path.relpath(outputs_dir, nvidia_jetson_dir)
 
@@ -127,17 +125,16 @@ def main():
         if run_results_path.exists():
             shutil.rmtree(run_results_path)
 
-        # TASK A: Run Test Inference Framework
+        # TASK A: Run Test Inference Framework 
         inference_cmd = [
             sys.executable, "run_test_inference.py",
             "--model", args.model_type,
             "--splits", f"{args.dataset}:{args.mask_type}",
             "--frames-subdir", args.frames_subdir,
-            "--fp16",
             "--weights-path", str(ckpt_path),
             "--results-dir", f"{rel_results_dir}/{model_tag}"
         ]
-        run_command(inference_cmd, nvidia_jetson_dir, f"Running FP16 Inference for {model_tag}")
+        run_command(inference_cmd, nvidia_jetson_dir, f"Running Inference for {model_tag}")
 
         # TASK B: Run Spatial/Perceptual Metrics (PSNR, SSIM, VFID)
         metrics_cmd = [
@@ -167,7 +164,6 @@ def main():
 
         # TASK D: Consolidate data logs
         metric_file = None
-        # Scan your local outputs folder to grab the JSON matching this checkpoint name
         for f in outputs_dir.glob("*.json"):
             if model_tag in f.name:
                 metric_file = f
