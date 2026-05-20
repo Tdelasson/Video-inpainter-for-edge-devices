@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 Automated Video Inpainting Benchmark Script.
-Handles working directory isolation dynamically by mapping script execution contexts.
+Tailored for executing from metrics_new/VIPER_metrics while running scripts
+located two folders up inside the nvidia_jetson directory.
 """
 
 import argparse
@@ -77,13 +78,19 @@ def run_command(cmd: list[str], cwd: Path, description: str) -> None:
 def main():
     args = parse_args()
 
-    # Dynamic Path Setup based on where this orchestration file is running
+    # Define exact directories based on your workspace setup
     viper_metrics_dir = Path(__file__).resolve().parent
 
-    # Crucial Fix: The scripts live one level up in the metrics repository root
-    repo_root = viper_metrics_dir.parent
+    # 2 folders up, then inside nvidia_jetson
+    nvidia_jetson_dir = (viper_metrics_dir / ".." / ".." / "nvidia_jetson").resolve()
 
-    # Standardize output locations inside VIPER_metrics
+    if not (nvidia_jetson_dir / "run_test_inference.py").exists():
+        print(f"❌ ERROR: Could not find run_test_inference.py inside: {nvidia_jetson_dir}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"🎯 Verified nvidia_jetson directory at: {nvidia_jetson_dir}")
+
+    # Establish benchmarking outputs cleanly within your current VIPER_metrics workspace
     results_dir_name = "JetsonResults"
     custom_results_root = viper_metrics_dir / "nvidia_jetson" / results_dir_name
     outputs_dir = viper_metrics_dir / "outputs"
@@ -92,7 +99,7 @@ def main():
     final_report_dir.mkdir(parents=True, exist_ok=True)
     outputs_dir.mkdir(parents=True, exist_ok=True)
 
-    # Resolve checkpoints path relative to running context
+    # Get absolute path for checkpoints directory
     absolute_ckpt_dir = args.checkpoint_dir.resolve()
     if not absolute_ckpt_dir.exists():
         raise FileNotFoundError(f"Checkpoint source folder path missing: {absolute_ckpt_dir}")
@@ -103,6 +110,11 @@ def main():
         return
 
     print(f"Found {len(checkpoints)} checkpoints for evaluation benchmarking pipeline.")
+
+    # Calculate paths relative to where the commands will be running (nvidia_jetson_dir)
+    # This ensures scripts running in nvidia_jetson find your outputs folder perfectly
+    rel_results_dir = os.path.relpath(custom_results_root, nvidia_jetson_dir)
+    rel_outputs_dir = os.path.relpath(outputs_dir, nvidia_jetson_dir)
 
     # Iterate over checkpoints
     for idx, ckpt_path in enumerate(checkpoints, 1):
@@ -123,10 +135,9 @@ def main():
             "--frames-subdir", args.frames_subdir,
             "--fp16",
             "--weights-path", str(ckpt_path),
-            "--results-dir", str(run_results_path)
+            "--results-dir", f"{rel_results_dir}/{model_tag}"
         ]
-        # Notice we pass `repo_root` as working directory context
-        run_command(inference_cmd, repo_root, f"Running FP16 Inference for {model_tag}")
+        run_command(inference_cmd, nvidia_jetson_dir, f"Running FP16 Inference for {model_tag}")
 
         # TASK B: Run Spatial/Perceptual Metrics (PSNR, SSIM, VFID)
         metrics_cmd = [
@@ -135,10 +146,10 @@ def main():
             "--mask-type", args.mask_type,
             "--frames-subdir", args.frames_subdir,
             "--device", args.device,
-            "--models", f"../VIPER_metrics/nvidia_jetson/{results_dir_name}/{model_tag}",
-            "--output-dir", str(outputs_dir)
+            "--models", f"{rel_results_dir}/{model_tag}",
+            "--output-dir", f"{rel_outputs_dir}"
         ]
-        run_command(metrics_cmd, repo_root, f"Extracting PSNR, SSIM, & VFID for {model_tag}")
+        run_command(metrics_cmd, nvidia_jetson_dir, f"Extracting PSNR, SSIM, & VFID for {model_tag}")
 
         # TASK C: Compute Fast Blind Warping Error Matrix (FWE)
         ewarp_cmd = [
@@ -147,23 +158,22 @@ def main():
             "--dataset", args.dataset,
             "--mask-type", args.mask_type,
             "--frames-subdir", args.frames_subdir,
-            "--models", f"../VIPER_metrics/nvidia_jetson/{results_dir_name}/{model_tag}",
-            "--output-dir", str(outputs_dir),
+            "--models", f"{rel_results_dir}/{model_tag}",
+            "--output-dir", f"{rel_outputs_dir}",
             "--copy-input" if idx == 1 else ""
         ]
         ewarp_cmd = [item for item in ewarp_cmd if item]
-        run_command(ewarp_cmd, repo_root, f"Evaluating Temporal Consistency (FWE) for {model_tag}")
+        run_command(ewarp_cmd, nvidia_jetson_dir, f"Evaluating Temporal Consistency (FWE) for {model_tag}")
 
         # TASK D: Consolidate data logs
-        # Construct path matching how sub-scripts clean filenames dynamically
-        metric_file_name = f".._VIPER_metrics_nvidia_jetson_{results_dir_name}_{model_tag}.json"
-        metric_file = outputs_dir / metric_file_name
+        metric_file = None
+        # Scan your local outputs folder to grab the JSON matching this checkpoint name
+        for f in outputs_dir.glob("*.json"):
+            if model_tag in f.name:
+                metric_file = f
+                break
 
-        # Fallback check
-        if not metric_file.exists():
-            metric_file = outputs_dir / f"{model_tag}.json"
-
-        if metric_file.exists():
+        if metric_file and metric_file.exists():
             destination = final_report_dir / f"{model_tag}_metrics.json"
             shutil.copy2(metric_file, destination)
             print(f" Successfully tracked comprehensive logging ledger to: {destination}")
@@ -173,8 +183,7 @@ def main():
                 print(
                     f"| Model: {model_tag} | PSNR: {summary_data.get('psnr')} | SSIM: {summary_data.get('ssim')} | VFID: {summary_data.get('vfid')} |")
         else:
-            print(f" [Warning]: Target evaluation payload missing for {model_tag}. Checked: {metric_file}",
-                  file=sys.stderr)
+            print(f" [Warning]: Target evaluation payload missing for {model_tag} in outputs/ folder.", file=sys.stderr)
 
     print("\n Benchmarking process complete. Final ledgers archived inside 'benchmark_reports/'.")
 
