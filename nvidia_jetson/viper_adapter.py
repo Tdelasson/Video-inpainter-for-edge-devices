@@ -56,10 +56,11 @@ class ViperAdapter:
 
         orig_h, orig_w = frame_list[-1].shape[:2]
 
-        # Align target resolution to multiples of the downsample factor
-        target_w = ((orig_w + self.downsample_factor - 1) // self.downsample_factor) * self.downsample_factor
-        target_h = ((orig_h + self.downsample_factor - 1) // self.downsample_factor) * self.downsample_factor
-        target_res = (target_w, target_h)
+        # FIX: Force target_res to match your exact static TRT engine dimensions
+        # Replace 432 and 240 with the exact Width and Height your engine expects
+        ENGINE_WIDTH = 432
+        ENGINE_HEIGHT = 240
+        target_res = (ENGINE_WIDTH, ENGINE_HEIGHT)
 
         frames = [
             torch.from_numpy(cv2.cvtColor(cv2.resize(f, target_res), cv2.COLOR_BGR2RGB)).permute(2, 0, 1)
