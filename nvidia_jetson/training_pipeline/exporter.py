@@ -23,13 +23,15 @@ model = Viper(in_channels=in_channels, base_channels=args.base_channels, num_lay
 checkpoint = torch.load(args.pth_path, map_location=device)
 if isinstance(checkpoint, dict):
     if "model_state" in checkpoint:
-        model.load_state_dict(checkpoint["model_state"])
+        state_dict = checkpoint["model_state"]
     elif "state_dict" in checkpoint:
-        model.load_state_dict(checkpoint["state_dict"])
+        state_dict = checkpoint["state_dict"]
     else:
-        model.load_state_dict(checkpoint)
+        state_dict = checkpoint
 else:
-    model.load_state_dict(checkpoint)
+    state_dict = checkpoint
+
+model.load_state_dict(state_dict)
 
 model.to(device).eval()
 
