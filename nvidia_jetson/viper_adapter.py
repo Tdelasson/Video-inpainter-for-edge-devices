@@ -56,11 +56,8 @@ class ViperAdapter:
 
         orig_h, orig_w = frame_list[-1].shape[:2]
 
-        # FIX: Force target_res to match your exact static TRT engine dimensions
-        # Replace 432 and 240 with the exact Width and Height your engine expects
-        ENGINE_WIDTH = 432
-        ENGINE_HEIGHT = 240
-        target_res = (ENGINE_WIDTH, ENGINE_HEIGHT)
+        # FIX 1: Define static target resolution to match your engine blueprint (Width, Height)
+        target_res = (432, 240)
 
         frames = [
             torch.from_numpy(cv2.cvtColor(cv2.resize(f, target_res), cv2.COLOR_BGR2RGB)).permute(2, 0, 1)
@@ -76,7 +73,8 @@ class ViperAdapter:
             m_processed = cv2.dilate(m_processed, kernel, iterations=1)
             m_processed = cv2.GaussianBlur(m_processed, (5, 5), 2.0, borderType=cv2.BORDER_REPLICATE)
 
-            masks.append(torch.from_numpy(cv2.resize(m_processed, target_res, interpolation=cv2.INTER_NEAREST)).unsqueeze(0))
+            masks.append(
+                torch.from_numpy(cv2.resize(m_processed, target_res, interpolation=cv2.INTER_NEAREST)).unsqueeze(0))
 
         video_tensor = torch.stack(frames).unsqueeze(0).to(self.device).float() / 255.0
         mask_tensor = torch.stack(masks).unsqueeze(0).to(self.device).float().clamp(0.0, 1.0)
@@ -90,9 +88,14 @@ class ViperAdapter:
         mask_input = mask_tensor.squeeze(2)
         full_input = torch.cat([pixel_input, mask_input], dim=1)
 
+        # FIX 2: Override dynamic shapes to match exact engine layout: [Batch, Channels, Width, Height]
         if self.hidden_state is None:
+            ENGINE_HIDDEN_CHANNELS = 1024
+            ENGINE_HIDDEN_W = 27
+            ENGINE_HIDDEN_H = 15
+
             self.hidden_state = torch.zeros(
-                (B, self.hidden_channels, H // self.downsample_factor, W // self.downsample_factor),
+                (B, ENGINE_HIDDEN_CHANNELS, ENGINE_HIDDEN_W, ENGINE_HIDDEN_H),
                 dtype=full_input.dtype,
                 device=self.device
             )
