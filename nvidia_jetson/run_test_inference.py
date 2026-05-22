@@ -276,7 +276,7 @@ def main() -> None:
 
         split_metrics = []
         split_root = args.results_dir / adapter.name / dataset_name / mask_type
-        official_pred_root = split_root / "_official_eval_pred"
+        pred_root = split_root / ("_official_eval_pred" if mask_type == "synthetic" else "pred")
 
         for video in dataset:
             print(f"Inpainting '{video.name}' ({len(video.frames)} frames)")
@@ -309,8 +309,7 @@ def main() -> None:
                 if opt_key in perf and perf[opt_key] is not None:
                     video_metrics[opt_key] = perf[opt_key]
 
-            if mask_type == "synthetic":
-                save_prediction_video(video.name, result, official_pred_root)
+            save_prediction_video(video.name, result, pred_root)
 
             split_metrics.append(video_metrics)
 
