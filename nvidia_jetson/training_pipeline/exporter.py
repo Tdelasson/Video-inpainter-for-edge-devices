@@ -1,6 +1,7 @@
 import torch
 import argparse
 import sys
+print(sys.path)
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from model_architecture.viper import Viper
