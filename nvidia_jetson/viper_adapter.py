@@ -95,7 +95,7 @@ class ViperAdapter:
             ENGINE_HIDDEN_H = 15
 
             self.hidden_state = torch.zeros(
-                (B, ENGINE_HIDDEN_CHANNELS, ENGINE_HIDDEN_W, ENGINE_HIDDEN_H),
+                (B, ENGINE_HIDDEN_CHANNELS, ENGINE_HIDDEN_H, ENGINE_HIDDEN_W),
                 dtype=full_input.dtype,
                 device=self.device
             )
