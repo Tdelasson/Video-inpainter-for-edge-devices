@@ -1,35 +1,42 @@
 import torch
+import argparse
+import os
 from model_architecture.viper import Viper
 
-# 1. Setup parameters (must match your trained model)
-seq_len = 5
-in_channels = seq_len * 3 + seq_len
-base_channels = 128 # Use your BASE_CHANNELS value
-num_layers = 4     # Use your NUM_LAYERS value
+parser = argparse.ArgumentParser(description="Export Viper model to ONNX (stateful)")
+parser.add_argument("--pth_path", type=str, required=True, help="Path to the .pth model file")
+parser.add_argument("--seq_len", type=int, default=5)
+parser.add_argument("--base_channels", type=int, default=128)
+parser.add_argument("--num_layers", type=int, default=4)
+parser.add_argument("--height", type=int, default=432)
+parser.add_argument("--width", type=int, default=240)
+args = parser.parse_args()
+
+in_channels = args.seq_len * 3 + args.seq_len
 device = torch.device("cpu")
 
-# 2. Load the model
-model = Viper(in_channels=in_channels, base_channels=base_channels, num_layers=num_layers)
-model.load_state_dict(torch.load("../final_model.pth", map_location=torch.device('cpu')))
+model = Viper(in_channels=in_channels, base_channels=args.base_channels, num_layers=args.num_layers)
+model.load_state_dict(torch.load(args.pth_path, map_location=device))
 model.to(device).eval()
 
-# 3. Create dummy input (Batch, Channels, Height, Width)
-# Assuming 448x448 based on your inference script
-dummy_input = torch.randn(1, 20, 512, 512)
+# Calculate hidden state shape
+downsample_factor = 2 ** args.num_layers
+hidden_channels = args.base_channels * (2 ** (args.num_layers - 1))
+h, w = args.height // downsample_factor, args.width // downsample_factor
 
-# 4. Export
+dummy_input = torch.randn(1, in_channels, args.height, args.width)
+dummy_hidden = torch.zeros(1, hidden_channels, h, w)
+
+onnx_path = os.path.splitext(args.pth_path)[0] + ".onnx"
+
 torch.onnx.export(
     model,
-    dummy_input,
-    "../video_inpainter_dynamic.onnx",
+    (dummy_input, dummy_hidden),
+    onnx_path,
     export_params=True,
     opset_version=18,
     do_constant_folding=True,
-    input_names=['input'],
-    output_names=['output'],
-    # Specify which dimensions can change
-    dynamic_axes={
-        'input': {0: 'batch_size', 2: 'height', 3: 'width'},
-        'output': {0: 'batch_size', 2: 'height', 3: 'width'}
-    }
+    input_names=['input', 'hidden_state'],
+    output_names=['output', 'next_hidden_state'],
 )
+print(f"Exported to {onnx_path}")
