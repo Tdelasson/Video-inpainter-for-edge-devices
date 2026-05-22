@@ -1,6 +1,8 @@
 import torch
 import argparse
+import sys
 import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from model_architecture.viper import Viper
 
 parser = argparse.ArgumentParser(description="Export Viper model to ONNX (stateful)")
