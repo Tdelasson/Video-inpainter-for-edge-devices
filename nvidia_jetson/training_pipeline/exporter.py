@@ -2,7 +2,7 @@ import torch
 import argparse
 import sys
 import os
-from model_architecture.viper import Viper
+from nvidia_jetson.model_architecture.viper import Viper
 
 parser = argparse.ArgumentParser(description="Export Viper model to ONNX (stateful)")
 parser.add_argument("--pth_path", type=str, required=True, help="Path to the .pth model file")
