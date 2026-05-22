@@ -21,3 +21,11 @@ cusparselt-local-tegra-repo-ubuntu2204-0.7.0_1.0-1_arm64.deb*
 pipeline_jetson_to_pc
 
 .idea
+*.pth
+*.pyc
+visualization/components/__pycache__/header_content.cpython-312.pyc
+visualization/components/__pycache__/text.cpython-312.pyc
+visualization/components/__pycache__/theme.cpython-312.pyc
+visualization/pages/__pycache__/__init__.cpython-312.pyc
+visualization/pages/__pycache__/about_us_page.cpython-312.pyc
+visualization/pages/__pycache__/guide_page.cpython-312.pyc
