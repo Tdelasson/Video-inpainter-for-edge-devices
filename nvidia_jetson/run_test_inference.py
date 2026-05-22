@@ -162,6 +162,18 @@ def parse_splits(raw_splits: list[str]) -> list[tuple[str, str]]:
     return splits
 
 
+def _infer_viper_run_name(args: argparse.Namespace, weights_path: Path) -> str:
+    """Use the provided weights/engine filename as the run folder name."""
+    if args.weights_path is not None:
+        return Path(args.weights_path).stem
+
+    model_key = args.model.lower()
+    if model_key.startswith("checkpoint"):
+        return args.model
+
+    return "viper"
+
+
 def _build_adapter(args: argparse.Namespace, device: str):
     model_key = args.model.lower()
     if model_key == "fuseformer_om":
@@ -214,7 +226,7 @@ def _build_adapter(args: argparse.Namespace, device: str):
             seq_len=args.viper_seq_len,
             fp16=args.fp16,
         )
-        adapter.name = args.model
+        adapter.name = _infer_viper_run_name(args, weights_path)
         return adapter, getattr(adapter, "model_h", None), getattr(adapter, "model_w", None)
 
     if model_key == "opencv_inpaint":
