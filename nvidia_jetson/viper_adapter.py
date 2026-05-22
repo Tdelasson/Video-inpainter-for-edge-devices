@@ -32,7 +32,7 @@ class ViperAdapter:
             self.model = TRTModule(
                 engine=engine,
                 input_names=["input", "hidden_state"],
-                output_names=["output", "add_251"]
+                output_names=["output", "next_hidden_state"]
             )
 
         else:
