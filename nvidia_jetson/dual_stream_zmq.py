@@ -64,7 +64,7 @@ def parse_args() -> argparse.Namespace:
         choices=["auto", "mask", "inpaint"],
         help="Right stream mode: mask, inpaint, or auto",
     )
-    parser.add_argument("--imgsz", type=int, default=256, help="Image size (must match TRT engine)")
+    parser.add_argument("--imgsz", type=int, nargs=2, default=[256, 256], help="Image size as [width height] (must match TRT engine)")
     parser.add_argument(
         "--propainter-ref-stride",
         type=int,
