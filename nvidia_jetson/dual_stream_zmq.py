@@ -52,6 +52,12 @@ def parse_args() -> argparse.Namespace:
         help="Optional baseline inpainting model",
     )
     parser.add_argument(
+        "--viper-weights-path",
+        type=str,
+        default=None,
+        help="Path to Viper model weights (required if inpaint-model is viper)",
+    )
+    parser.add_argument(
         "--right-view",
         type=str,
         default="auto",
@@ -151,8 +157,10 @@ def build_inpainter(model_name: str, device: str):
     if model_name == "vinet":
         return ViNETAdapter(str(DEFAULT_VINET_WEIGHTS_PATH), device=device, fp16=args.fp16), 10
     if model_name == "viper":
-        return ViperAdapter(str(DEFAULT_VIPER_WEIGHTS_PATH), device=device, seq_len=5, fp16=args.fp16), 5
-    raise ValueError(f"Unsupported inpaint model: {model_name}")
+        weights_path = args.viper_weights_path
+        if not weights_path:
+            raise ValueError("You must provide --viper-weights-path when using inpaint-model viper")
+        return ViperAdapter(str(weights_path), device=device, seq_len=5, fp16=args.fp16), 5
 
 
 def make_mask_overlay(frame, mask):
