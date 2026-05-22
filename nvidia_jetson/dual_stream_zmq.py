@@ -119,7 +119,9 @@ socket_stats.bind(f"tcp://*:{STATS_PORT}")
 
 #Generating a GStream-pipeline -> collects the video from the CSI-camera and converts it to a format OpenCV can read.
 #Image processing happens on the GPU to spare the CPU's power
-def gstreamer_pipeline_in(sensor_id=0, w=args.imgsz, h=args.imgsz, fps=FPS):
+def gstreamer_pipeline_in(sensor_id=0, w=None, h=None, fps=FPS):
+    if w is None or h is None:
+        w, h = args.imgsz
     # nvarguscamerasrc caps select the sensor mode (native resolution).
     # A second nvvidconv stage performs the actual scaling to w x h.
     return (
@@ -132,7 +134,8 @@ def gstreamer_pipeline_in(sensor_id=0, w=args.imgsz, h=args.imgsz, fps=FPS):
     )
 
 def open_camera():
-    return cv2.VideoCapture(gstreamer_pipeline_in(sensor_id=SENSOR_ID), cv2.CAP_GSTREAMER)
+    w, h = args.imgsz
+    return cv2.VideoCapture(gstreamer_pipeline_in(sensor_id=SENSOR_ID, w=w, h=h), cv2.CAP_GSTREAMER)
 
 
 def build_inpainter(model_name: str, device: str):
