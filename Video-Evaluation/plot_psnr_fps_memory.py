@@ -96,6 +96,8 @@ def plot_points(
     realtime_latency_ms: float,
     size_scale: float,
     min_bubble_size: float,
+    label_fontsize: float,
+    legend_fontsize: float,
     dpi: int,
 ) -> None:
     psnr_vals = [p.psnr for p in points]
@@ -149,15 +151,35 @@ def plot_points(
     for p, bubble_size in zip(points, bubble_sizes):
         radius_points = math.sqrt(bubble_size / math.pi)
         edge_offset = radius_points / math.sqrt(2.0)
+
+        x_span = max(max_psnr - min_psnr, 1e-9)
+        y_span = max(max_latency - min_latency, 1e-9)
+        x_norm = (p.psnr - min_psnr) / x_span
+        y_norm = (p.latency_ms - min_latency) / y_span
+
+        # Keep labels compact: flip to left near right edge and downward near top edge.
+        x_sign = -1.0 if x_norm > 0.78 else 1.0
+        y_sign = -1.0 if y_norm > 0.82 else 1.0
+
+        x_offset = x_sign * (edge_offset + 2.0)
+        y_offset = y_sign * (edge_offset + 2.0)
+        ha = "right" if x_sign < 0 else "left"
+        va = "top" if y_sign < 0 else "bottom"
+
+        is_viper = p.name.strip().lower() == "viper"
+        label_text = "VIPER (ours)" if is_viper else p.name
+        label_weight = "bold" if is_viper else "normal"
+
         text = ax.annotate(
-            f"{p.name}\n{p.memory_mb:.1f} MB",
+            f"{label_text}\n{p.memory_mb:.1f} MB",
             xy=(p.psnr, p.latency_ms),
-            xytext=(edge_offset + 2.0, edge_offset + 2.0),
+            xytext=(x_offset, y_offset),
             textcoords="offset points",
-            fontsize=12,
+            fontsize=label_fontsize,
             color="#121212",
-            ha="left",
-            va="bottom",
+            ha=ha,
+            va=va,
+            fontweight=label_weight,
             zorder=4,
         )
         annotation_artists.append(text)
@@ -221,7 +243,7 @@ def plot_points(
     legend = ax.get_legend()
     if legend is not None:
         for txt in legend.get_texts():
-            txt.set_fontsize(12)
+            txt.set_fontsize(legend_fontsize)
 
     ax.set_xlim(min_psnr - x_margin, max_psnr + x_margin)
     ax.set_ylim(lower_shade_start, max_latency + y_margin)
@@ -321,6 +343,18 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--label-fontsize",
+        type=float,
+        default=17.0,
+        help="Annotation font size for model labels (default: 17).",
+    )
+    parser.add_argument(
+        "--legend-fontsize",
+        type=float,
+        default=14.0,
+        help="Legend font size (default: 14).",
+    )
+    parser.add_argument(
         "--dpi",
         type=int,
         default=180,
@@ -355,6 +389,8 @@ def main() -> None:
         realtime_latency_ms=args.realtime_latency_ms,
         size_scale=args.size_scale,
         min_bubble_size=args.min_bubble_size,
+        label_fontsize=args.label_fontsize,
+        legend_fontsize=args.legend_fontsize,
         dpi=args.dpi,
     )
 
@@ -367,6 +403,8 @@ def main() -> None:
             realtime_latency_ms=args.realtime_latency_ms,
             size_scale=args.size_scale,
             min_bubble_size=args.min_bubble_size,
+            label_fontsize=args.label_fontsize,
+            legend_fontsize=args.legend_fontsize,
             dpi=args.dpi,
         )
         print(f"Saved SVG chart to: {svg_path}")
