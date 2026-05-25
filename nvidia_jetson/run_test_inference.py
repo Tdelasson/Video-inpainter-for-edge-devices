@@ -149,6 +149,13 @@ def parse_args() -> argparse.Namespace:
         default=3.0,
         help="OpenCV inpainting radius used when --model opencv_inpaint",
     )
+    parser.add_argument(
+        "--imgsz",
+        type=int,
+        nargs=2,
+        default=[448, 432],
+        help="Image size as [width height] for ViperAdapter"
+    )
     return parser.parse_args()
 
 
@@ -225,6 +232,7 @@ def _build_adapter(args: argparse.Namespace, device: str):
             device=device,
             seq_len=args.viper_seq_len,
             fp16=args.fp16,
+            target_res=tuple(args.imgsz),
         )
         adapter.name = _infer_viper_run_name(args, weights_path)
         return adapter, getattr(adapter, "model_h", None), getattr(adapter, "model_w", None)
