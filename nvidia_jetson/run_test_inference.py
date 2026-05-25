@@ -38,6 +38,16 @@ DEFAULT_SPLITS = [
     ("DAVIS", "RealObject"),
     ("YouTube-VOS", "synthetic"),
 ]
+QUALITATIVE_VIDEO_NAMES = [
+    "dog-gooses",
+    "drift-chicane",
+    "kite-surf",
+    "miami-surf",
+    "parkour",
+    "rollerblade",
+    "tennis",
+]
+QUALITATIVE_FRAMES_SUBDIR = "JPEGImages_Old"
 
 
 def save_prediction_video(video_name: str, frames: list[np.ndarray], pred_root: Path) -> None:
@@ -70,6 +80,14 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default="JPEGImages_432_240",
         help="Frame folder under Test_Data/<dataset> (e.g. JPEGImages or JPEGImages_432_240)",
+    )
+    parser.add_argument(
+        "--qualitative-only",
+        action="store_true",
+        help=(
+            "Run only the curated qualitative video list and read frames from JPEGImages_Old. "
+            "Edit QUALITATIVE_VIDEO_NAMES in this file to change the list."
+        ),
     )
     parser.add_argument(
         "--limit",
@@ -290,14 +308,26 @@ def main() -> None:
     adapter, _, _ = _build_adapter(args, device)
 
     for dataset_name, mask_type in eval_splits:
+        frames_subdir = QUALITATIVE_FRAMES_SUBDIR if args.qualitative_only else args.frames_subdir
         dataset = TestDataset(
             "Test_Data",
             dataset_name,
             mask_type,
-            frames_subdir=args.frames_subdir,
+            frames_subdir=frames_subdir,
         )
+
+        if args.qualitative_only:
+            requested = set(QUALITATIVE_VIDEO_NAMES)
+            dataset.video_names = [name for name in dataset.video_names if name in requested]
+
         if args.limit is not None:
             dataset.video_names = dataset.video_names[: args.limit]
+
+        if args.qualitative_only:
+            print(
+                f"Qualitative-only mode: using {frames_subdir} and {len(dataset.video_names)} videos "
+                f"from QUALITATIVE_VIDEO_NAMES"
+            )
 
         print(f"\nRunning {dataset_name} / {mask_type} on {len(dataset)} videos")
 
