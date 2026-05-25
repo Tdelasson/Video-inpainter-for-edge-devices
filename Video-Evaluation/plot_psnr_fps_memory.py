@@ -98,6 +98,8 @@ def plot_points(
     min_bubble_size: float,
     label_fontsize: float,
     legend_fontsize: float,
+    axis_label_fontsize: float,
+    tick_fontsize: float,
     dpi: int,
 ) -> None:
     psnr_vals = [p.psnr for p in points]
@@ -268,11 +270,11 @@ def plot_points(
     ax.set_xlim(x_min_lim - x_pad, x_max_lim + x_pad)
     ax.set_ylim(y_min_lim - y_pad, y_max_lim + y_pad)
 
-    ax.set_xlabel("PSNR (dB)", fontsize=16)
-    ax.set_ylabel("Latency (ms)", fontsize=16)
+    ax.set_xlabel("PSNR (dB)", fontsize=axis_label_fontsize)
+    ax.set_ylabel("Latency (ms)", fontsize=axis_label_fontsize)
     if title.strip():
         ax.set_title(title, fontsize=16, pad=12)
-    ax.tick_params(axis="both", labelsize=13)
+    ax.tick_params(axis="both", labelsize=tick_fontsize)
     ax.grid(True, linestyle=":", linewidth=0.9, color="#a5a5a5", alpha=0.85)
     for spine in ax.spines.values():
         spine.set_linewidth(1.1)
@@ -351,8 +353,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--legend-fontsize",
         type=float,
-        default=14.0,
-        help="Legend font size (default: 14).",
+        default=15.0,
+        help="Legend font size (default: 15).",
+    )
+    parser.add_argument(
+        "--axis-label-fontsize",
+        type=float,
+        default=18.0,
+        help="Axis label font size for PSNR/Latency (default: 18).",
+    )
+    parser.add_argument(
+        "--tick-fontsize",
+        type=float,
+        default=15.0,
+        help="Axis tick label font size (default: 15).",
     )
     parser.add_argument(
         "--dpi",
@@ -391,6 +405,8 @@ def main() -> None:
         min_bubble_size=args.min_bubble_size,
         label_fontsize=args.label_fontsize,
         legend_fontsize=args.legend_fontsize,
+        axis_label_fontsize=args.axis_label_fontsize,
+        tick_fontsize=args.tick_fontsize,
         dpi=args.dpi,
     )
 
@@ -405,6 +421,8 @@ def main() -> None:
             min_bubble_size=args.min_bubble_size,
             label_fontsize=args.label_fontsize,
             legend_fontsize=args.legend_fontsize,
+            axis_label_fontsize=args.axis_label_fontsize,
+            tick_fontsize=args.tick_fontsize,
             dpi=args.dpi,
         )
         print(f"Saved SVG chart to: {svg_path}")
