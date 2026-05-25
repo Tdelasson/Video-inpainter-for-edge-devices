@@ -110,7 +110,7 @@ def plot_points(
     x_margin = max((max_psnr - min_psnr) * 0.08, 0.5)
     y_margin = max((max_latency - min_latency) * 0.12, 1.0)
 
-    fig, ax = plt.subplots(figsize=(12, 7), dpi=dpi)
+    fig, ax = plt.subplots(figsize=(13, 7.5), dpi=dpi)
 
     ax.set_facecolor("#f4f4f4")
 
@@ -126,7 +126,7 @@ def plot_points(
         y=realtime_latency_ms,
         color="#5f5f5f",
         linestyle="--",
-        linewidth=1.6,
+        linewidth=1.8,
         label=f"Real-time threshold ({realtime_latency_ms:.0f} ms)",
     )
 
@@ -140,7 +140,7 @@ def plot_points(
         s=bubble_sizes,
         c=bubble_colors,
         edgecolors="#1c1c1c",
-        linewidths=1.1,
+        linewidths=1.2,
         alpha=0.82,
         zorder=3,
     )
@@ -154,7 +154,7 @@ def plot_points(
             xy=(p.psnr, p.latency_ms),
             xytext=(edge_offset + 2.0, edge_offset + 2.0),
             textcoords="offset points",
-            fontsize=10,
+            fontsize=12,
             color="#121212",
             ha="left",
             va="bottom",
@@ -218,6 +218,10 @@ def plot_points(
     ]
 
     ax.legend(handles=handles, loc="best", frameon=True, facecolor="white", edgecolor="#cfcfcf")
+    legend = ax.get_legend()
+    if legend is not None:
+        for txt in legend.get_texts():
+            txt.set_fontsize(12)
 
     ax.set_xlim(min_psnr - x_margin, max_psnr + x_margin)
     ax.set_ylim(lower_shade_start, max_latency + y_margin)
@@ -242,10 +246,14 @@ def plot_points(
     ax.set_xlim(x_min_lim - x_pad, x_max_lim + x_pad)
     ax.set_ylim(y_min_lim - y_pad, y_max_lim + y_pad)
 
-    ax.set_xlabel("PSNR (dB)", fontsize=14)
-    ax.set_ylabel("Latency (ms)", fontsize=14)
-    ax.set_title(title, fontsize=16, pad=12)
-    ax.grid(True, linestyle=":", linewidth=0.7, color="#a5a5a5", alpha=0.85)
+    ax.set_xlabel("PSNR (dB)", fontsize=16)
+    ax.set_ylabel("Latency (ms)", fontsize=16)
+    if title.strip():
+        ax.set_title(title, fontsize=16, pad=12)
+    ax.tick_params(axis="both", labelsize=13)
+    ax.grid(True, linestyle=":", linewidth=0.9, color="#a5a5a5", alpha=0.85)
+    for spine in ax.spines.values():
+        spine.set_linewidth(1.1)
 
     fig.tight_layout()
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -282,14 +290,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("Video-Evaluation") / "psnr_latency_memory_plot.png",
+        default=Path("psnr_latency_memory_plot.png"),
         help="Output image path.",
     )
     parser.add_argument(
         "--title",
         type=str,
-        default="Model Comparison: PSNR vs Latency (Bubble = Memory)",
-        help="Chart title.",
+        default="",
+        help="Chart title. Leave empty to omit title (default: no title).",
     )
     parser.add_argument(
         "--realtime-latency-ms",
@@ -318,6 +326,17 @@ def parse_args() -> argparse.Namespace:
         default=180,
         help="Output image DPI.",
     )
+    parser.add_argument(
+        "--save-svg",
+        action="store_true",
+        help="Also save an SVG copy suitable for LaTeX/papers.",
+    )
+    parser.add_argument(
+        "--svg-output",
+        type=Path,
+        default=None,
+        help="Optional SVG output path. If omitted with --save-svg, uses output path with .svg suffix.",
+    )
     return parser.parse_args()
 
 
@@ -338,6 +357,19 @@ def main() -> None:
         min_bubble_size=args.min_bubble_size,
         dpi=args.dpi,
     )
+
+    if args.save_svg:
+        svg_path = args.svg_output if args.svg_output is not None else args.output.with_suffix(".svg")
+        plot_points(
+            points=points,
+            output_path=svg_path,
+            title=args.title,
+            realtime_latency_ms=args.realtime_latency_ms,
+            size_scale=args.size_scale,
+            min_bubble_size=args.min_bubble_size,
+            dpi=args.dpi,
+        )
+        print(f"Saved SVG chart to: {svg_path}")
 
     print(f"Saved chart to: {args.output}")
     print(f"Plotted {len(points)} models.")
