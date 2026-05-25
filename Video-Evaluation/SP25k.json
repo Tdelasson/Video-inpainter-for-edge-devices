@@ -1,0 +1,22 @@
+{
+  "model": "SP25k",
+  "dataset": "DAVIS",
+  "mask_type": "synthetic",
+  "num_videos": 50,
+  "psnr": 27.378,
+  "ssim": 0.9612,
+  "vfid": 1.4476,
+  "ewarp": 0.001684,
+  "ewarp_x1e2": 0.168,
+  "fp16": true,
+  "fps": 22.4276,
+  "latency_ms": 44.6322,
+  "peak_memory_mb": 26.0,
+  "baseline_allocated_mb": 0.7742,
+  "baseline_reserved_mb": 25.48,
+  "peak_allocated_mb": 14.04,
+  "peak_reserved_mb": 26.0,
+  "cuda_total_mb": 7619.81,
+  "cuda_used_start_mb": 3437.7302,
+  "cuda_used_end_mb": 3443.7036
+}

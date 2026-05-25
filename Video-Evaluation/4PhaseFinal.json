@@ -1,0 +1,22 @@
+{
+  "model": "4PhaseFinal",
+  "dataset": "DAVIS",
+  "mask_type": "synthetic",
+  "num_videos": 50,
+  "psnr": 28.7813,
+  "ssim": 0.9635,
+  "vfid": 1.4602,
+  "ewarp": 0.00165,
+  "ewarp_x1e2": 0.165,
+  "fp16": true,
+  "fps": 16.1946,
+  "latency_ms": 61.7922,
+  "peak_memory_mb": 416.0,
+  "baseline_allocated_mb": 20.9542,
+  "baseline_reserved_mb": 409.32,
+  "peak_allocated_mb": 255.81,
+  "peak_reserved_mb": 416.0,
+  "cuda_total_mb": 7619.81,
+  "cuda_used_start_mb": 3598.6004,
+  "cuda_used_end_mb": 3611.4378
+}
