@@ -95,8 +95,12 @@ class ViperAdapter:
         # FIX 2: Override dynamic shapes to match exact engine layout: [Batch, Channels, Width, Height]
         if self.hidden_state is None:
             ENGINE_HIDDEN_CHANNELS = 1024
-            ENGINE_HIDDEN_W = 27
-            ENGINE_HIDDEN_H = 15
+            if self.target_res[0] % self.downsample_factor != 0 or self.target_res[1] % self.downsample_factor != 0:
+                raise ValueError(
+                    f"Target resolution {self.target_res} must be divisible by {self.downsample_factor} (downsample factor)."
+                )
+            ENGINE_HIDDEN_W = self.target_res[0] // self.downsample_factor
+            ENGINE_HIDDEN_H = self.target_res[1] // self.downsample_factor
 
             self.hidden_state = torch.zeros(
                 (B, ENGINE_HIDDEN_CHANNELS, ENGINE_HIDDEN_H, ENGINE_HIDDEN_W),
