@@ -23,6 +23,7 @@ from viper_adapter import ViperAdapter
 
 REPO_ROOT = Path(__file__).resolve().parent
 DEFAULT_RESULTS_DIR = REPO_ROOT / "Results"
+DEFAULT_FRAMES_SUBDIR = "JPEGImages_432_240"
 DEFAULT_FUSEFORMER_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/OnlineInpainting/fuseformer.pth").resolve()
 DEFAULT_E2FGVI_HQ_WEIGHTS_PATH = (
             REPO_ROOT / "../Baselines_Repos/pthFiles/OnlineInpainting/E2FGVI-HQ-CVPR22.pth").resolve()
@@ -78,7 +79,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--frames-subdir",
         type=str,
-        default="JPEGImages_432_240",
+        default=DEFAULT_FRAMES_SUBDIR,
         help="Frame folder under Test_Data/<dataset> (e.g. JPEGImages or JPEGImages_432_240)",
     )
     parser.add_argument(
@@ -308,7 +309,12 @@ def main() -> None:
     adapter, _, _ = _build_adapter(args, device)
 
     for dataset_name, mask_type in eval_splits:
-        frames_subdir = QUALITATIVE_FRAMES_SUBDIR if args.qualitative_only else args.frames_subdir
+        # In qualitative mode, keep legacy default (JPEGImages_Old) unless user
+        # explicitly sets --frames-subdir, e.g. JPEGImages_512_512.
+        frames_subdir = args.frames_subdir
+        if args.qualitative_only and args.frames_subdir == DEFAULT_FRAMES_SUBDIR:
+            frames_subdir = QUALITATIVE_FRAMES_SUBDIR
+
         dataset = TestDataset(
             "Test_Data",
             dataset_name,
@@ -325,8 +331,8 @@ def main() -> None:
 
         if args.qualitative_only:
             print(
-                f"Qualitative-only mode: using {frames_subdir} and {len(dataset.video_names)} videos "
-                f"from QUALITATIVE_VIDEO_NAMES"
+                f"Qualitative-only mode: using frames='{frames_subdir}', masks='{dataset.masks_dir.name}', "
+                f"videos={len(dataset.video_names)} from QUALITATIVE_VIDEO_NAMES"
             )
 
         print(f"\nRunning {dataset_name} / {mask_type} on {len(dataset)} videos")
