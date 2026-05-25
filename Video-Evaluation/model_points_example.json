@@ -1,0 +1,34 @@
+{
+  "models": [
+    {
+      "model": "VIPER",
+      "psnr": 29.5006,
+      "latency_ms": 44.7526,
+      "memory_mb": 26.0
+    },
+    {
+      "model": "ProPainter",
+      "psnr": 35.4222,
+      "latency_ms": 645.462,
+      "memory_mb": 2872.64
+    },
+    {
+      "model": "E2FGVI",
+      "psnr": 34.3002,
+      "latency_ms": 195.0668,
+      "memory_mb": 5853.92
+    },
+    {
+      "model": "FuseFormer_OM",
+      "psnr":  31.6724,
+      "latency_ms": 118.4394,
+      "memory_mb": 346.0756
+    },
+    {
+      "model": "VINet",
+      "psnr": 28.4904,
+      "latency_ms": 598.1164,
+      "memory_mb": 1220.4366
+    }
+  ]
+}

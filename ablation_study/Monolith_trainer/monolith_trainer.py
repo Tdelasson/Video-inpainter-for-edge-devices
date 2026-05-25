@@ -39,26 +39,13 @@ DATA_ROOT = get_data_root()
 
 
 def get_loss_weights(current_iter, total_iters, args):
-    """Continuously scheduled loss weights — no discrete phase jumps."""
-
-    # Warmup fraction for each loss
-    perc_warmup = 0.05  # perceptual active almost immediately
-    style_warmup = 0.10  # style follows shortly after
-    temp_warmup = 0.20  # temporal needs some spatial foundation first
-    adv_warmup = 0.6  # adversarial introduced once model is competent
-
-    def ramp(start_frac, end_frac=None, target=1.0):
-        end_frac = end_frac or (start_frac + 0.20)
-        progress = (current_iter / total_iters - start_frac) / (end_frac - start_frac)
-        return float(np.clip(progress, 0.0, 1.0)) * target
-
     return {
-        "w_pixel_m": args.w_pixel_m,  # always on
-        "w_pixel_f": args.w_pixel_f,  # always on
-        "w_perc": args.w_perc * ramp(perc_warmup),
-        "w_style": args.w_style * ramp(style_warmup),
-        "w_temp": args.w_temp * ramp(temp_warmup),
-        "w_adv": args.w_adv * ramp(adv_warmup),
+        "w_pixel_m": args.w_pixel_m,
+        "w_pixel_f": args.w_pixel_f,
+        "w_perc": args.w_perc,
+        "w_style": args.w_style,
+        "w_temp": args.w_temp,
+        "w_adv": args.w_adv,
     }
 
 def parse_args():

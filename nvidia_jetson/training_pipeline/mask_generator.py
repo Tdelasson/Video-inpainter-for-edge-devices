@@ -4,6 +4,7 @@ import numpy as np
 from torch.utils.data import DataLoader
 from training_pipeline.dataset import *
 import torchvision.transforms.functional as TF
+import torch.nn.functional as F
 
 def generate_random_square_mask(video: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     B, T, C, H, W = video.shape
@@ -36,22 +37,14 @@ def generate_flying_square_mask(video: torch.Tensor) -> tuple[torch.Tensor, torc
     return masks
 
 
-def generate_arbitrary_shape_mask(video, mask_dataset: IrregularMaskDataset)-> tuple[torch.Tensor, torch.Tensor]:
-    """
-    video: torch.Tensor (B, T, C, H, W)
-    mask_dataset: IrregularMaskDataset
-    """
+def generate_arbitrary_shape_mask(video, mask_dataset: IrregularMaskDataset):
     B, T, C, H, W = video.shape
     device = video.device
     all_masks = []
 
     for b in range(B):
         max_start_idx = len(mask_dataset) - T
-
-        if max_start_idx <= 0:
-            start_idx = 0
-        else:
-            start_idx = np.random.randint(0, max_start_idx)
+        start_idx = 0 if max_start_idx <= 0 else np.random.randint(0, max_start_idx)
 
         video_masks = []
         for t in range(T):
@@ -60,9 +53,7 @@ def generate_arbitrary_shape_mask(video, mask_dataset: IrregularMaskDataset)-> t
 
         all_masks.append(torch.stack(video_masks))
 
-    masks = torch.stack(all_masks).to(device)
-
-    return masks
+    return torch.stack(all_masks).to(device)
 
 def generate_video_object_mask(video: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     pass

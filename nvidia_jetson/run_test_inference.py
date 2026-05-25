@@ -24,11 +24,12 @@ from viper_adapter import ViperAdapter
 REPO_ROOT = Path(__file__).resolve().parent
 DEFAULT_RESULTS_DIR = REPO_ROOT / "Results"
 DEFAULT_FUSEFORMER_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/OnlineInpainting/fuseformer.pth").resolve()
-DEFAULT_E2FGVI_HQ_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/OnlineInpainting/E2FGVI-HQ-CVPR22.pth").resolve()
+DEFAULT_E2FGVI_HQ_WEIGHTS_PATH = (
+            REPO_ROOT / "../Baselines_Repos/pthFiles/OnlineInpainting/E2FGVI-HQ-CVPR22.pth").resolve()
 DEFAULT_PROPAINTER_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/ProPainter/ProPainter.pth").resolve()
 DEFAULT_PROPAINTER_RAFT_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/ProPainter/raft-things.pth").resolve()
 DEFAULT_PROPAINTER_FLOW_WEIGHTS_PATH = (
-    REPO_ROOT / "../Baselines_Repos/pthFiles/ProPainter/recurrent_flow_completion.pth"
+        REPO_ROOT / "../Baselines_Repos/pthFiles/ProPainter/recurrent_flow_completion.pth"
 ).resolve()
 DEFAULT_VINET_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/ViNETsave_agg_rec_512.pth").resolve()
 DEFAULT_VIPER_WEIGHTS_PATH = (REPO_ROOT / "final_model.pth").resolve()
@@ -55,7 +56,7 @@ def parse_args() -> argparse.Namespace:
         "--model",
         type=str,
         default="fuseformer_om",
-        choices=["fuseformer_om", "e2fgvi_hq", "propainter", "vinet", "viper", "opencv_inpaint", "constant_fill"],
+        #choices=["fuseformer_om", "e2fgvi_hq", "propainter", "vinet", "viper", "opencv_inpaint", "constant_fill"],
         help="Model adapter to run",
     )
     parser.add_argument(
@@ -148,6 +149,13 @@ def parse_args() -> argparse.Namespace:
         default=3.0,
         help="OpenCV inpainting radius used when --model opencv_inpaint",
     )
+    parser.add_argument(
+        "--imgsz",
+        type=int,
+        nargs=2,
+        default=[448, 432],
+        help="Image size as [width height] for ViperAdapter"
+    )
     return parser.parse_args()
 
 
@@ -159,6 +167,18 @@ def parse_splits(raw_splits: list[str]) -> list[tuple[str, str]]:
         dataset_name, mask_type = item.split(":", 1)
         splits.append((dataset_name, mask_type))
     return splits
+
+
+def _infer_viper_run_name(args: argparse.Namespace, weights_path: Path) -> str:
+    """Use the provided weights/engine filename as the run folder name."""
+    if args.weights_path is not None:
+        return Path(args.weights_path).stem
+
+    model_key = args.model.lower()
+    if model_key.startswith("checkpoint"):
+        return args.model
+
+    return "viper"
 
 
 def _build_adapter(args: argparse.Namespace, device: str):
@@ -205,16 +225,16 @@ def _build_adapter(args: argparse.Namespace, device: str):
         )
         return adapter, adapter.model_h, adapter.model_w
 
-    if model_key == "viper":
+    if model_key == "viper" or model_key.startswith("checkpoint"):
         weights_path = args.weights_path or DEFAULT_VIPER_WEIGHTS_PATH
         adapter = ViperAdapter(
             model_path=str(weights_path),
             device=device,
             seq_len=args.viper_seq_len,
             fp16=args.fp16,
+            target_res=tuple(args.imgsz),
         )
-        if not hasattr(adapter, "name"):
-            adapter.name = "viper"
+        adapter.name = _infer_viper_run_name(args, weights_path)
         return adapter, getattr(adapter, "model_h", None), getattr(adapter, "model_w", None)
 
     if model_key == "opencv_inpaint":
@@ -232,7 +252,7 @@ def _build_adapter(args: argparse.Namespace, device: str):
 
 
 def _run_video_inpaint(adapter, model_key: str, frames: list[np.ndarray], masks: list[np.ndarray]) -> list[np.ndarray]:
-    if model_key != "viper":
+    if model_key != "viper" and not model_key.startswith("checkpoint"):
         return adapter.inpaint(frames, masks, resize_to_original=False)
 
     # Viper requires exactly seq_len frames. Repeat-pad with the first real frame
@@ -242,11 +262,18 @@ def _run_video_inpaint(adapter, model_key: str, frames: list[np.ndarray], masks:
 
     seq_len = adapter.seq_len
     outputs: list[np.ndarray] = []
+
+    processed_masks = [m.astype(np.float32) if m.dtype != np.float32 else m for m in masks]
+
     for idx in range(len(frames)):
+        start_idx = max(0, idx + 1 - seq_len)
         pad = max(0, seq_len - (idx + 1))
-        padded_frames = [frames[0]] * pad + frames[: idx + 1]
-        padded_masks = [masks[0]] * pad + masks[: idx + 1]
-        pred = adapter.inpaint(padded_frames, padded_masks, resize_to_original=False)
+
+        padded_frames = [frames[0]] * pad + frames[start_idx: idx + 1]
+        padded_masks = [processed_masks[0]] * pad + processed_masks[start_idx: idx + 1]
+
+        # Enforce True as in dual stream zmq
+        pred = adapter.inpaint(padded_frames, padded_masks, resize_to_original=True)
         outputs.append(pred[-1])
 
     return outputs
@@ -298,13 +325,13 @@ def main() -> None:
             }
 
             for opt_key in (
-                "baseline_allocated_mb",
-                "baseline_reserved_mb",
-                "peak_allocated_mb",
-                "peak_reserved_mb",
-                "cuda_total_mb",
-                "cuda_used_start_mb",
-                "cuda_used_end_mb",
+                    "baseline_allocated_mb",
+                    "baseline_reserved_mb",
+                    "peak_allocated_mb",
+                    "peak_reserved_mb",
+                    "cuda_total_mb",
+                    "cuda_used_start_mb",
+                    "cuda_used_end_mb",
             ):
                 if opt_key in perf and perf[opt_key] is not None:
                     video_metrics[opt_key] = perf[opt_key]
@@ -323,16 +350,16 @@ def main() -> None:
 
         if split_metrics:
             for key in (
-                "fps",
-                "latency_ms",
-                "peak_memory_mb",
-                "baseline_allocated_mb",
-                "baseline_reserved_mb",
-                "peak_allocated_mb",
-                "peak_reserved_mb",
-                "cuda_total_mb",
-                "cuda_used_start_mb",
-                "cuda_used_end_mb",
+                    "fps",
+                    "latency_ms",
+                    "peak_memory_mb",
+                    "baseline_allocated_mb",
+                    "baseline_reserved_mb",
+                    "peak_allocated_mb",
+                    "peak_reserved_mb",
+                    "cuda_total_mb",
+                    "cuda_used_start_mb",
+                    "cuda_used_end_mb",
             ):
                 vals = [m[key] for m in split_metrics if key in m]
                 if vals:

@@ -12,7 +12,7 @@ import torch.nn.functional as F
 
 # Pipeline Imports
 from training_pipeline.dataset import *
-from model_architecture.viper import Viper
+from ablation_study.Base_Unet.unet_base import UNetBase
 from training_pipeline.mask_generator import (
     generate_random_square_mask,
     generate_flying_square_mask,
@@ -490,7 +490,7 @@ def main():
     print(f"Saving this phase to: {save_dir}")
 
     in_channels = args.seq_len * 3 + args.seq_len
-    model = Viper(in_channels=in_channels, base_channels=BASE_CHANNELS, num_layers=NUM_LAYERS).to(device)
+    model = UNetBase(in_channels=in_channels, base_channels=BASE_CHANNELS, out_channels=3).to(device)
 
     base_discriminator = PretrainedPatchDiscriminator().to(device)
     discriminator = NoisyDiscriminator(base_discriminator)
