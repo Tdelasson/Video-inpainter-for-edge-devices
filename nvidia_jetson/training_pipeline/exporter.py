@@ -8,8 +8,8 @@ parser.add_argument("--pth_path", type=str, required=True)
 parser.add_argument("--seq_len", type=int, default=5)
 parser.add_argument("--base_channels", type=int, default=128)
 parser.add_argument("--num_layers", type=int, default=4)
-parser.add_argument("--height", type=int, default=432)
-parser.add_argument("--width", type=int, default=240)
+parser.add_argument("--height", type=int, default=256)
+parser.add_argument("--width", type=int, default=448)
 parser.add_argument("--fp16", action='store_true', help="Export in FP16 precision") # Added flag
 args = parser.parse_args()
 

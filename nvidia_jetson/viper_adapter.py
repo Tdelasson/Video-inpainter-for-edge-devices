@@ -7,10 +7,11 @@ from training_pipeline.config import NUM_LAYERS, BASE_CHANNELS
 
 
 class ViperAdapter:
-    def __init__(self, model_path, device="cuda", seq_len=5, fp16=True):
+    def __init__(self, model_path, device="cuda", seq_len=5, fp16=True, target_res=(448, 432)):
         self.device = device
         self.seq_len = seq_len
         self.fp16 = fp16
+        self.target_res = target_res
 
         # Load from config
         self.num_layers = NUM_LAYERS
@@ -56,8 +57,7 @@ class ViperAdapter:
 
         orig_h, orig_w = frame_list[-1].shape[:2]
 
-        # FIX 1: Define static target resolution to match your engine blueprint (Width, Height)
-        target_res = (432, 240)
+        target_res = self.target_res
 
         frames = [
             torch.from_numpy(cv2.cvtColor(cv2.resize(f, target_res), cv2.COLOR_BGR2RGB)).permute(2, 0, 1)
