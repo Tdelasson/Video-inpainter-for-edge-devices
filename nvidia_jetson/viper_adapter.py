@@ -7,7 +7,7 @@ from training_pipeline.config import NUM_LAYERS, BASE_CHANNELS
 
 
 class ViperAdapter:
-    def __init__(self, model_path, device="cuda", seq_len=5, fp16=True, target_res=(448, 432)):
+    def __init__(self, model_path, device="cuda", seq_len=5, fp16=True, target_res=(448, 256)):
         self.device = device
         self.seq_len = seq_len
         self.fp16 = fp16
