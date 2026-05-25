@@ -163,7 +163,7 @@ def build_inpainter(model_name: str, device: str):
         weights_path = args.viper_weights_path
         if not weights_path:
             raise ValueError("You must provide --viper-weights-path when using inpaint-model viper")
-        return ViperAdapter(str(weights_path), device=device, seq_len=5, fp16=args.fp16), 5
+        return ViperAdapter(str(weights_path), device=device, seq_len=5, fp16=args.fp16, target_res=tuple(args.imgsz)), 5
 
 
 def make_mask_overlay(frame, mask):
