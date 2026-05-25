@@ -44,7 +44,11 @@ class ViperAdapter:
                 base_channels=self.base_channels,
                 num_layers=self.num_layers
             ).to(device)
-            self.model.load_state_dict(torch.load(model_path, map_location=device))
+            checkpoint = torch.load(model_path, map_location=device)
+            if "model_state" in checkpoint:
+                self.model.load_state_dict(checkpoint["model_state"])
+            else:
+                self.model.load_state_dict(checkpoint)
             if self.fp16:
                 self.model = self.model.half()
 
