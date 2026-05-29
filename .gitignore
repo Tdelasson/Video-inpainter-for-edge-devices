@@ -21,3 +21,10 @@ cusparselt-local-tegra-repo-ubuntu2204-0.7.0_1.0-1_arm64.deb*
 pipeline_jetson_to_pc
 
 .idea
+
+# LaTeX build artifacts
+exam-portfolios/*.aux
+exam-portfolios/*.log
+exam-portfolios/*.pdf
+exam-portfolios/*.out
+exam-portfolios/*.synctex.gz

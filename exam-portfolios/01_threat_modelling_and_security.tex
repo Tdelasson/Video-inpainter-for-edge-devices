@@ -1,0 +1,73 @@
+\documentclass[10pt,a4paper]{article}
+\usepackage[margin=1.5cm]{geometry}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{parskip}
+
+\titlespacing*{\section}{0pt}{4pt}{2pt}
+\titlespacing*{\subsection}{0pt}{3pt}{1pt}
+\setlist{nosep, leftmargin=*}
+\pagestyle{empty}
+
+\begin{document}
+
+\begin{center}
+    \textbf{\large Topic 1: Threat Modelling and What is Security?}
+\end{center}
+
+\section*{Formal Definition of Security}
+A system is \textbf{secure} if it behaves according to its specification under the presence of an adversary. More precisely: a system is secure if no attacker within a defined threat model can violate the security policy.
+
+\section*{CIA Model}
+\begin{itemize}
+    \item \textbf{Confidentiality}: Information is only accessible to authorised parties.
+    \item \textbf{Integrity}: Information and systems can only be modified by authorised parties in authorised ways.
+    \item \textbf{Availability}: Systems and information are accessible to authorised parties when needed.
+\end{itemize}
+
+\section*{Lampson's Triad: Policy / Mechanism / Assurance}
+\begin{itemize}
+    \item \textbf{Policy}: \emph{What} security properties must hold (e.g., ``only admins may delete records'').
+    \item \textbf{Mechanism}: \emph{How} the policy is enforced (e.g., access control checks, encryption).
+    \item \textbf{Assurance}: \emph{Why} we believe the mechanism correctly enforces the policy (e.g., formal proofs, testing, audits).
+\end{itemize}
+
+\section*{STRIDE Threat Categories}
+\begin{itemize}
+    \item \textbf{S}poofing -- violates \emph{authentication} (pretending to be another entity).
+    \item \textbf{T}ampering -- violates \emph{integrity} (unauthorised modification of data).
+    \item \textbf{R}epudiation -- violates \emph{non-repudiation} (denying having performed an action).
+    \item \textbf{I}nformation Disclosure -- violates \emph{confidentiality} (exposing data to unauthorised parties).
+    \item \textbf{D}enial of Service -- violates \emph{availability} (making a service unavailable).
+    \item \textbf{E}levation of Privilege -- violates \emph{authorisation} (gaining higher access than allowed).
+\end{itemize}
+
+\section*{Threat Modelling Process}
+\begin{enumerate}
+    \item Identify assets and security objectives.
+    \item Create an architecture overview (Data Flow Diagrams with trust boundaries).
+    \item Decompose the system into components.
+    \item Identify threats using STRIDE per element.
+    \item Rate threats (e.g., DREAD) and determine mitigations.
+\end{enumerate}
+
+\section*{Example System: Simple Online Store}
+\textbf{Components}: Web browser (client), Web server, Database, Payment gateway.\\
+\textbf{Trust boundaries}: Internet $\leftrightarrow$ Web server; Web server $\leftrightarrow$ Database; Web server $\leftrightarrow$ Payment gateway.
+
+\subsection*{Threat Analysis (STRIDE applied)}
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Threat} & \textbf{Example} & \textbf{Mitigation} \\ \hline
+Spoofing & Attacker impersonates a user & Multi-factor authentication \\ \hline
+Tampering & Modify order price in transit & TLS + server-side validation \\ \hline
+Repudiation & User denies placing an order & Logging + digital signatures \\ \hline
+Info.\ Disclosure & SQL injection leaks user data & Input validation, parameterised queries \\ \hline
+Denial of Service & Flooding the web server & Rate limiting, CDN \\ \hline
+Elevation of Priv. & Normal user accesses admin panel & Role-based access control (RBAC) \\ \hline
+\end{tabular}
+
+\section*{Relating to Other Topics}
+The formal security definition directly applies to \textbf{web security}: a web application is secure if no attacker (within the web threat model -- e.g., network attacker, script injection) can violate the security policy (e.g., same-origin policy, access control rules). STRIDE maps neatly onto web vulnerabilities: XSS $\to$ Information Disclosure, CSRF $\to$ Spoofing/Tampering, etc.
+
+\end{document}
