@@ -244,7 +244,7 @@ def ai_thread():
                 peak_mem_mb = -1.0
 
             stats_payload = {
-                "resolution": f"{WIDTH}x{HEIGHT}",
+                "resolution": f"{args.imgsz[0]}x{args.imgsz[1]}",
                 "cam_fps": round(cam_stats["fps"], 2),
                 "fps": round(stats_counter["n"] / stats_elapsed, 2),
                 "latency_ms": round(stats_counter["sum_total_ms"] / n, 2),
