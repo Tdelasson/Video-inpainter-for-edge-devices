@@ -237,8 +237,17 @@ def ai_thread():
         if stats_elapsed >= 0.5:
             n = max(1, stats_counter["n"])
             if torch.cuda.is_available():
-                mem_mb = torch.cuda.memory_allocated() / (1024 ** 2)
-                peak_mem_mb = torch.cuda.max_memory_allocated() / (1024 ** 2)
+                try:
+                    # pynvml gives true driver-level VRAM usage, capturing TRT + PyTorch allocations
+                    import pynvml
+                    pynvml.nvmlInit()
+                    handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+                    info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+                    mem_mb = info.used / (1024 ** 2)
+                    peak_mem_mb = torch.cuda.max_memory_allocated() / (1024 ** 2)
+                except Exception:
+                    mem_mb = torch.cuda.memory_allocated() / (1024 ** 2)
+                    peak_mem_mb = torch.cuda.max_memory_allocated() / (1024 ** 2)
             else:
                 mem_mb = -1.0
                 peak_mem_mb = -1.0
