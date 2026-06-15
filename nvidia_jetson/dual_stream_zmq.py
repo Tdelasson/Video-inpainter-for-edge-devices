@@ -24,8 +24,8 @@ from Masking.yolo_segmenter import YOLOSegmenter
 DIRECT_PORT = 5000
 AI_PORT = 5001
 STATS_PORT = 5002
-WIDTH = 256
-HEIGHT = 256
+WIDTH = 512
+HEIGHT = 512
 FPS = 30
 SENSOR_ID = 0
 
@@ -38,7 +38,7 @@ DEFAULT_PROPAINTER_FLOW_WEIGHTS_PATH = (
     REPO_ROOT / "../Baselines_Repos/pthFiles/ProPainter/recurrent_flow_completion.pth"
 ).resolve()
 DEFAULT_VINET_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/ViNETsave_agg_rec_512.pth").resolve()
-DEFAULT_VIPER_WEIGHTS_PATH = (REPO_ROOT / "final_model.pth").resolve()
+DEFAULT_VIPER_WEIGHTS_PATH = (REPO_ROOT / "video_inpainter_dynamic.engine").resolve()
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Dual ZMQ stream with segmentation and optional inpainting")
@@ -52,12 +52,19 @@ def parse_args() -> argparse.Namespace:
         help="Optional baseline inpainting model",
     )
     parser.add_argument(
+        "--viper-weights-path",
+        type=str,
+        default=None,
+        help="Path to Viper model weights (required if inpaint-model is viper)",
+    )
+    parser.add_argument(
         "--right-view",
         type=str,
         default="auto",
         choices=["auto", "mask", "inpaint"],
         help="Right stream mode: mask, inpaint, or auto",
     )
+    parser.add_argument("--imgsz", type=int, nargs=2, default=[256, 256], help="Image size as [width height] (must match TRT engine)")
     parser.add_argument(
         "--propainter-ref-stride",
         type=int,
@@ -112,7 +119,9 @@ socket_stats.bind(f"tcp://*:{STATS_PORT}")
 
 #Generating a GStream-pipeline -> collects the video from the CSI-camera and converts it to a format OpenCV can read.
 #Image processing happens on the GPU to spare the CPU's power
-def gstreamer_pipeline_in(sensor_id=0, w=WIDTH, h=HEIGHT, fps=FPS):
+def gstreamer_pipeline_in(sensor_id=0, w=None, h=None, fps=FPS):
+    if w is None or h is None:
+        w, h = args.imgsz
     # nvarguscamerasrc caps select the sensor mode (native resolution).
     # A second nvvidconv stage performs the actual scaling to w x h.
     return (
@@ -125,7 +134,8 @@ def gstreamer_pipeline_in(sensor_id=0, w=WIDTH, h=HEIGHT, fps=FPS):
     )
 
 def open_camera():
-    return cv2.VideoCapture(gstreamer_pipeline_in(sensor_id=SENSOR_ID), cv2.CAP_GSTREAMER)
+    w, h = args.imgsz
+    return cv2.VideoCapture(gstreamer_pipeline_in(sensor_id=SENSOR_ID, w=w, h=h), cv2.CAP_GSTREAMER)
 
 
 def build_inpainter(model_name: str, device: str):
@@ -150,8 +160,10 @@ def build_inpainter(model_name: str, device: str):
     if model_name == "vinet":
         return ViNETAdapter(str(DEFAULT_VINET_WEIGHTS_PATH), device=device, fp16=args.fp16), 10
     if model_name == "viper":
-        return ViperAdapter(str(DEFAULT_VIPER_WEIGHTS_PATH), device=device, seq_len=5, fp16=args.fp16), 5
-    raise ValueError(f"Unsupported inpaint model: {model_name}")
+        weights_path = args.viper_weights_path
+        if not weights_path:
+            raise ValueError("You must provide --viper-weights-path when using inpaint-model viper")
+        return ViperAdapter(str(weights_path), device=device, seq_len=5, fp16=args.fp16, target_res=tuple(args.imgsz)), 5
 
 
 def make_mask_overlay(frame, mask):
@@ -165,7 +177,7 @@ ai_queue = queue.Queue(maxsize=1)
 cam_stats = {"fps": 0.0}   # updated by main loop, read by ai_thread for stats payload
 _cam_fps_counter = {"n": 0, "t0": time.time()}
 device = "cuda" if torch.cuda.is_available() else "cpu"
-segmenter = YOLOSegmenter(model_name=args.seg_model, model_path=args.seg_model_path, target_classes=[0])
+segmenter = YOLOSegmenter(model_name=args.seg_model, model_path=args.seg_model_path, target_classes=[0], imgsz = args.imgsz)
 inpainter, window_size = build_inpainter(args.inpaint_model, device)
 frame_buffer = deque(maxlen=max(1, window_size))
 mask_buffer = deque(maxlen=max(1, window_size))
@@ -187,10 +199,12 @@ def ai_thread():
         ts_stage_start = time.perf_counter()
 
         mask = segmenter.segment(frame, return_annotated=False)
+        mask = mask.astype("float32")
+
         frame_buffer.append(frame)
         mask_buffer.append(mask)
 
-        if inpainter is not None and (frame_id % args.infer_every) == 0 and len(frame_buffer) >= 2:
+        if inpainter is not None and (frame_id % args.infer_every) == 0 and len(frame_buffer) == window_size:
             try:
                 pred = inpainter.inpaint(list(frame_buffer), list(mask_buffer), resize_to_original=True)
                 if pred:
@@ -199,11 +213,15 @@ def ai_thread():
                 print(f"Inpainting warning on frame {frame_id}: {exc}")
 
         if args.right_view == "mask":
-            out_frame = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
+            # Due to us training on masks in the 0.0-1.0 range, we need to convert back to 0-255 uint8 for visualization
+            vis_mask = (mask * 255).astype("uint8")
+            out_frame = cv2.cvtColor(vis_mask, cv2.COLOR_GRAY2BGR)
         elif args.right_view == "inpaint":
-            out_frame = last_inpaint if last_inpaint is not None else make_mask_overlay(frame, mask)
+            vis_mask = (mask * 255).astype("uint8")
+            out_frame = last_inpaint if last_inpaint is not None else make_mask_overlay(frame, vis_mask)
         else:
-            out_frame = last_inpaint if last_inpaint is not None else make_mask_overlay(frame, mask)
+            vis_mask = (mask * 255).astype("uint8")
+            out_frame = last_inpaint if last_inpaint is not None else make_mask_overlay(frame, vis_mask)
 
         #komprimer og send via ZMQ
         _, buffer = cv2.imencode('.jpg', out_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
@@ -226,7 +244,7 @@ def ai_thread():
                 peak_mem_mb = -1.0
 
             stats_payload = {
-                "resolution": f"{WIDTH}x{HEIGHT}",
+                "resolution": f"{args.imgsz[0]}x{args.imgsz[1]}",
                 "cam_fps": round(cam_stats["fps"], 2),
                 "fps": round(stats_counter["n"] / stats_elapsed, 2),
                 "latency_ms": round(stats_counter["sum_total_ms"] / n, 2),
@@ -263,7 +281,7 @@ cap = open_camera()
 #checks if there is connection to the camera and if GStreamer could start udpsink correct
 #if not the program is exited.
 if not cap.isOpened():
-    print("Fejl: Kunne ikke åbne kamera.")
+    print("Error, could not open camera. Please check the connection and GStreamer pipeline.")
     sys.exit()
 
 
@@ -271,8 +289,8 @@ if not cap.isOpened():
 t = threading.Thread(target=ai_thread, daemon=True)
 t.start()
 
-print(f"Streamer nu CAM1 direkte til port:{DIRECT_PORT} og port:{AI_PORT}\n")
-print(f"Capture config: {WIDTH}x{HEIGHT}@{FPS} sensor-id={SENSOR_ID}")
+print(f"Streaming CAM1 to port:{DIRECT_PORT} and port:{AI_PORT}\n")
+print(f"Capture config: {args.imgsz}x{args.imgsz}@{FPS} sensor-id={SENSOR_ID}")
 print(f"Segmentation model: {args.seg_model}")
 if args.seg_model_path:
     print(f"Segmentation weights override: {args.seg_model_path}")
@@ -308,7 +326,7 @@ try:
         frame_id += 1
 
 except KeyboardInterrupt:
-    print("\n Stopper stream...")
+    print("\n Stopping stream...")
 
 
 #Releases the camera (CSI-port)
@@ -330,4 +348,4 @@ finally:
     context.term()
     if args.display:
         cv2.destroyAllWindows()
-    print("Alt er released correct.")
+    print("Everything is released and closed. Exiting.")

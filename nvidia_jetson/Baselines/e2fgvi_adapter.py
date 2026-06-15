@@ -235,8 +235,8 @@ class E2FGVIAdapter(BaseVideoInpainter):
     ):
         self.device = torch.device(device)
         self.fp16 = fp16 and self.device.type == "cuda"
-        self.model_h = None
-        self.model_w = None
+        self.model_h = MODEL_H
+        self.model_w = MODEL_W
         self.ref_length = REF_LENGTH
         self.num_ref = NUM_REF
         self.neighbor_stride = NEIGHBOR_STRIDE

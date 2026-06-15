@@ -1,0 +1,22 @@
+{
+  "model": "SP70k",
+  "dataset": "DAVIS",
+  "mask_type": "synthetic",
+  "num_videos": 50,
+  "psnr": 29.5006,
+  "ssim": 0.9645,
+  "vfid": 1.4351,
+  "ewarp": 0.001456,
+  "ewarp_x1e2": 0.146,
+  "fp16": true,
+  "fps": 22.3672,
+  "latency_ms": 44.7526,
+  "peak_memory_mb": 26.0,
+  "baseline_allocated_mb": 0.7742,
+  "baseline_reserved_mb": 25.48,
+  "peak_allocated_mb": 14.04,
+  "peak_reserved_mb": 26.0,
+  "cuda_total_mb": 7619.81,
+  "cuda_used_start_mb": 3117.4416,
+  "cuda_used_end_mb": 3124.2658
+}

@@ -23,12 +23,14 @@ from viper_adapter import ViperAdapter
 
 REPO_ROOT = Path(__file__).resolve().parent
 DEFAULT_RESULTS_DIR = REPO_ROOT / "Results"
+DEFAULT_FRAMES_SUBDIR = "JPEGImages_432_240"
 DEFAULT_FUSEFORMER_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/OnlineInpainting/fuseformer.pth").resolve()
-DEFAULT_E2FGVI_HQ_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/OnlineInpainting/E2FGVI-HQ-CVPR22.pth").resolve()
+DEFAULT_E2FGVI_HQ_WEIGHTS_PATH = (
+            REPO_ROOT / "../Baselines_Repos/pthFiles/OnlineInpainting/E2FGVI-HQ-CVPR22.pth").resolve()
 DEFAULT_PROPAINTER_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/ProPainter/ProPainter.pth").resolve()
 DEFAULT_PROPAINTER_RAFT_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/ProPainter/raft-things.pth").resolve()
 DEFAULT_PROPAINTER_FLOW_WEIGHTS_PATH = (
-    REPO_ROOT / "../Baselines_Repos/pthFiles/ProPainter/recurrent_flow_completion.pth"
+        REPO_ROOT / "../Baselines_Repos/pthFiles/ProPainter/recurrent_flow_completion.pth"
 ).resolve()
 DEFAULT_VINET_WEIGHTS_PATH = (REPO_ROOT / "../Baselines_Repos/pthFiles/ViNETsave_agg_rec_512.pth").resolve()
 DEFAULT_VIPER_WEIGHTS_PATH = (REPO_ROOT / "final_model.pth").resolve()
@@ -37,6 +39,16 @@ DEFAULT_SPLITS = [
     ("DAVIS", "RealObject"),
     ("YouTube-VOS", "synthetic"),
 ]
+QUALITATIVE_VIDEO_NAMES = [
+    "dog-gooses",
+    "drift-chicane",
+    "kite-surf",
+    "miami-surf",
+    "parkour",
+    "rollerblade",
+    "tennis",
+]
+QUALITATIVE_FRAMES_SUBDIR = "JPEGImages_Old"
 
 
 def save_prediction_video(video_name: str, frames: list[np.ndarray], pred_root: Path) -> None:
@@ -55,7 +67,7 @@ def parse_args() -> argparse.Namespace:
         "--model",
         type=str,
         default="fuseformer_om",
-        choices=["fuseformer_om", "e2fgvi_hq", "propainter", "vinet", "viper", "opencv_inpaint", "constant_fill"],
+        #choices=["fuseformer_om", "e2fgvi_hq", "propainter", "vinet", "viper", "opencv_inpaint", "constant_fill"],
         help="Model adapter to run",
     )
     parser.add_argument(
@@ -67,8 +79,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--frames-subdir",
         type=str,
-        default="JPEGImages_432_240",
+        default=DEFAULT_FRAMES_SUBDIR,
         help="Frame folder under Test_Data/<dataset> (e.g. JPEGImages or JPEGImages_432_240)",
+    )
+    parser.add_argument(
+        "--qualitative-only",
+        action="store_true",
+        help=(
+            "Run only the curated qualitative video list and read frames from JPEGImages_Old. "
+            "Edit QUALITATIVE_VIDEO_NAMES in this file to change the list."
+        ),
     )
     parser.add_argument(
         "--limit",
@@ -148,6 +168,13 @@ def parse_args() -> argparse.Namespace:
         default=3.0,
         help="OpenCV inpainting radius used when --model opencv_inpaint",
     )
+    parser.add_argument(
+        "--imgsz",
+        type=int,
+        nargs=2,
+        default=[448, 432],
+        help="Image size as [width height] for ViperAdapter"
+    )
     return parser.parse_args()
 
 
@@ -159,6 +186,18 @@ def parse_splits(raw_splits: list[str]) -> list[tuple[str, str]]:
         dataset_name, mask_type = item.split(":", 1)
         splits.append((dataset_name, mask_type))
     return splits
+
+
+def _infer_viper_run_name(args: argparse.Namespace, weights_path: Path) -> str:
+    """Use the provided weights/engine filename as the run folder name."""
+    if args.weights_path is not None:
+        return Path(args.weights_path).stem
+
+    model_key = args.model.lower()
+    if model_key.startswith("checkpoint"):
+        return args.model
+
+    return "viper"
 
 
 def _build_adapter(args: argparse.Namespace, device: str):
@@ -205,16 +244,16 @@ def _build_adapter(args: argparse.Namespace, device: str):
         )
         return adapter, adapter.model_h, adapter.model_w
 
-    if model_key == "viper":
+    if model_key == "viper" or model_key.startswith("checkpoint"):
         weights_path = args.weights_path or DEFAULT_VIPER_WEIGHTS_PATH
         adapter = ViperAdapter(
             model_path=str(weights_path),
             device=device,
             seq_len=args.viper_seq_len,
             fp16=args.fp16,
+            target_res=tuple(args.imgsz),
         )
-        if not hasattr(adapter, "name"):
-            adapter.name = "viper"
+        adapter.name = _infer_viper_run_name(args, weights_path)
         return adapter, getattr(adapter, "model_h", None), getattr(adapter, "model_w", None)
 
     if model_key == "opencv_inpaint":
@@ -232,7 +271,7 @@ def _build_adapter(args: argparse.Namespace, device: str):
 
 
 def _run_video_inpaint(adapter, model_key: str, frames: list[np.ndarray], masks: list[np.ndarray]) -> list[np.ndarray]:
-    if model_key != "viper":
+    if model_key != "viper" and not model_key.startswith("checkpoint"):
         return adapter.inpaint(frames, masks, resize_to_original=False)
 
     # Viper requires exactly seq_len frames. Repeat-pad with the first real frame
@@ -242,11 +281,18 @@ def _run_video_inpaint(adapter, model_key: str, frames: list[np.ndarray], masks:
 
     seq_len = adapter.seq_len
     outputs: list[np.ndarray] = []
+
+    processed_masks = [m.astype(np.float32) if m.dtype != np.float32 else m for m in masks]
+
     for idx in range(len(frames)):
+        start_idx = max(0, idx + 1 - seq_len)
         pad = max(0, seq_len - (idx + 1))
-        padded_frames = [frames[0]] * pad + frames[: idx + 1]
-        padded_masks = [masks[0]] * pad + masks[: idx + 1]
-        pred = adapter.inpaint(padded_frames, padded_masks, resize_to_original=False)
+
+        padded_frames = [frames[0]] * pad + frames[start_idx: idx + 1]
+        padded_masks = [processed_masks[0]] * pad + processed_masks[start_idx: idx + 1]
+
+        # Enforce True as in dual stream zmq
+        pred = adapter.inpaint(padded_frames, padded_masks, resize_to_original=True)
         outputs.append(pred[-1])
 
     return outputs
@@ -263,20 +309,37 @@ def main() -> None:
     adapter, _, _ = _build_adapter(args, device)
 
     for dataset_name, mask_type in eval_splits:
+        # In qualitative mode, keep legacy default (JPEGImages_Old) unless user
+        # explicitly sets --frames-subdir, e.g. JPEGImages_512_512.
+        frames_subdir = args.frames_subdir
+        if args.qualitative_only and args.frames_subdir == DEFAULT_FRAMES_SUBDIR:
+            frames_subdir = QUALITATIVE_FRAMES_SUBDIR
+
         dataset = TestDataset(
             "Test_Data",
             dataset_name,
             mask_type,
-            frames_subdir=args.frames_subdir,
+            frames_subdir=frames_subdir,
         )
+
+        if args.qualitative_only:
+            requested = set(QUALITATIVE_VIDEO_NAMES)
+            dataset.video_names = [name for name in dataset.video_names if name in requested]
+
         if args.limit is not None:
             dataset.video_names = dataset.video_names[: args.limit]
+
+        if args.qualitative_only:
+            print(
+                f"Qualitative-only mode: using frames='{frames_subdir}', masks='{dataset.masks_dir.name}', "
+                f"videos={len(dataset.video_names)} from QUALITATIVE_VIDEO_NAMES"
+            )
 
         print(f"\nRunning {dataset_name} / {mask_type} on {len(dataset)} videos")
 
         split_metrics = []
         split_root = args.results_dir / adapter.name / dataset_name / mask_type
-        official_pred_root = split_root / "_official_eval_pred"
+        pred_root = split_root / ("_official_eval_pred" if mask_type == "synthetic" else "pred")
 
         for video in dataset:
             print(f"Inpainting '{video.name}' ({len(video.frames)} frames)")
@@ -298,19 +361,18 @@ def main() -> None:
             }
 
             for opt_key in (
-                "baseline_allocated_mb",
-                "baseline_reserved_mb",
-                "peak_allocated_mb",
-                "peak_reserved_mb",
-                "cuda_total_mb",
-                "cuda_used_start_mb",
-                "cuda_used_end_mb",
+                    "baseline_allocated_mb",
+                    "baseline_reserved_mb",
+                    "peak_allocated_mb",
+                    "peak_reserved_mb",
+                    "cuda_total_mb",
+                    "cuda_used_start_mb",
+                    "cuda_used_end_mb",
             ):
                 if opt_key in perf and perf[opt_key] is not None:
                     video_metrics[opt_key] = perf[opt_key]
 
-            if mask_type == "synthetic":
-                save_prediction_video(video.name, result, official_pred_root)
+            save_prediction_video(video.name, result, pred_root)
 
             split_metrics.append(video_metrics)
 
@@ -324,16 +386,16 @@ def main() -> None:
 
         if split_metrics:
             for key in (
-                "fps",
-                "latency_ms",
-                "peak_memory_mb",
-                "baseline_allocated_mb",
-                "baseline_reserved_mb",
-                "peak_allocated_mb",
-                "peak_reserved_mb",
-                "cuda_total_mb",
-                "cuda_used_start_mb",
-                "cuda_used_end_mb",
+                    "fps",
+                    "latency_ms",
+                    "peak_memory_mb",
+                    "baseline_allocated_mb",
+                    "baseline_reserved_mb",
+                    "peak_allocated_mb",
+                    "peak_reserved_mb",
+                    "cuda_total_mb",
+                    "cuda_used_start_mb",
+                    "cuda_used_end_mb",
             ):
                 vals = [m[key] for m in split_metrics if key in m]
                 if vals:

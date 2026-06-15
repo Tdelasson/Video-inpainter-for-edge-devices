@@ -39,7 +39,7 @@ def plot_losses(df, phase_name, log_scale=False, smooth_window=50):
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10), sharex=True)
 
     # --- Top Plot: Total Loss ---
-    ax1.plot(df.index, df['total'], alpha=0.3, color='gray', label='Raw Total')
+    # ax1.plot(df.index, df['total'], alpha=0.3, color='gray', label='Raw Total')
     ax1.plot(df.index, df['total'].rolling(window=smooth_window).mean(),
              color='black', linewidth=2, label=f'Total (SMA {smooth_window})')
 
