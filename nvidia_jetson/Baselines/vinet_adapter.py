@@ -13,7 +13,9 @@ from .base_adapter import BaseVideoInpainter
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _BASELINE_DIR = str(_REPO_ROOT / "Baselines_Repos" / "Deep-Video-Inpainting-master")
 
-MODEL_SIZE = 512
+MODEL_SIZE = "448 x 256"
+MODEL_SIZE_HEIGHT = 448
+MODEL_SIZE_WIDTH = 256
 SEARCH_RANGE = 4
 TEMPORAL_STRIDE = 3
 PRE_ROLL = 30
@@ -21,7 +23,7 @@ PRE_ROLL = 30
 
 @dataclass
 class _ViNetOptions:
-    crop_size: int = MODEL_SIZE
+    crop_size: str = MODEL_SIZE
     double_size: bool = True
     search_range: int = SEARCH_RANGE
     model: str = "vinet_final"
@@ -90,8 +92,8 @@ class ViNETAdapter(BaseVideoInpainter):
         if fp16:
             print("Warning: ViNET adapter does not support fp16 reliably; using fp32.")
 
-        self.model_h = MODEL_SIZE
-        self.model_w = MODEL_SIZE
+        self.model_h = MODEL_SIZE_HEIGHT
+        self.model_w = MODEL_SIZE_WIDTH
         self.temporal_stride = TEMPORAL_STRIDE
         self.pre_roll = PRE_ROLL
 
